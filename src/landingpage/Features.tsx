@@ -44,7 +44,7 @@ export const Features = () => {
         <div className="mb-20 max-w-2xl">
           <h2 className="text-4xl font-bold text-white mb-6">Built for speed.</h2>
           <p className="text-gray-400 text-lg">
-            Trogan isn't just a website builder. It's an AI-powered frontend engineer that never sleeps.
+            CleanSiteBuilder isn't just a website builder. It's an AI-powered frontend engineer that never sleeps.
           </p>
         </div>
 

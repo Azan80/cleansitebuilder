@@ -2,7 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { Twitter, Github, Linkedin, Sparkles } from "lucide-react";
+import { Twitter, Github, Linkedin } from "lucide-react";
+import Image from "next/image";
 
 export const Footer = () => {
   return (
@@ -11,10 +12,8 @@ export const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
           <div className="col-span-1 md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-6 group">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white">Trogan</span>
+              <Image src="/icon/project-initiation (1).png" alt="Logo" width={40} height={40} className="w-10 h-10" />
+              <span className="text-xl font-bold text-white">CleanSiteBuilder</span>
             </Link>
             <p className="text-gray-400 text-sm leading-relaxed mb-8">
               The AI-powered frontend engineer for modern teams.
@@ -50,7 +49,7 @@ export const Footer = () => {
 
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t border-white/5">
           <p className="text-gray-500 text-sm">
-            © {new Date().getFullYear()} TroganAI Inc. All rights reserved.
+            © {new Date().getFullYear()} CleanSiteBuilder Inc. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
              <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Twitter className="w-5 h-5" /></Link>

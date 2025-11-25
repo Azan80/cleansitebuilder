@@ -61,14 +61,7 @@ export const Hero = () => {
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="text-center max-w-4xl mx-auto mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-sm font-medium mb-8"
-          >
-            <Sparkles className="w-3 h-3" />
-            <span>v2.0: Now with Instant Deploy</span>
-          </motion.div>
+
 
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
@@ -160,7 +153,7 @@ export const Hero = () => {
               </div>
               <div className="bg-[#000] px-4 py-1.5 rounded-md text-xs text-gray-500 font-mono flex items-center gap-2 border border-white/5 min-w-[200px] justify-center">
                 <Globe className="w-3 h-3" /> 
-                {step === 2 ? "trogan.ai/demo-project" : "trogan.ai/new-project"}
+                {step === 2 ? "cleansitebuilder.com/demo-project" : "cleansitebuilder.com/new-project"}
               </div>
               <div className="w-16 flex justify-end">
                 {step === 2 && <CheckCircle2 className="w-4 h-4 text-green-500" />}
@@ -529,7 +522,7 @@ export const Hero = () => {
                               <div className="max-w-3xl mx-auto">
                                  <h1 className="text-3xl font-bold text-white mb-4 tracking-tight">Authentication</h1>
                                  <p className="text-gray-400 mb-8 leading-relaxed">
-                                    The Trogan API uses API keys to authenticate requests. You can view and manage your API keys in the Dashboard.
+                                    The CleanSiteBuilder API uses API keys to authenticate requests. You can view and manage your API keys in the Dashboard.
                                  </p>
 
                                  <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4 mb-8 flex gap-3 shadow-[0_0_20px_rgba(34,197,94,0.05)]">
@@ -559,7 +552,7 @@ export const Hero = () => {
                                     <div className="p-6 overflow-x-auto bg-[#050505] relative">
                                        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none" />
                                        <pre className="text-sm font-mono leading-relaxed relative z-10">
-                                          <span className="text-purple-400">curl</span> <span className="text-gray-500">https://api.trogan.ai/v1/customers \</span><br/>
+                                          <span className="text-purple-400">curl</span> <span className="text-gray-500">https://api.cleansitebuilder.com/v1/customers \</span><br/>
                                           <span className="text-gray-500">  -u </span> <span className="text-green-400">sk_test_123456789abcdef:</span> <span className="text-gray-500">\</span><br/>
                                           <span className="text-gray-500">  -d </span> <span className="text-blue-400">limit</span><span className="text-gray-500">=</span><span className="text-orange-400">3</span>
                                        </pre>

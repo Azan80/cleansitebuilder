@@ -15,13 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YourSaaS - Transform Your Business Workflow",
-  description: "The all-in-one platform that automates your processes, streamlines operations, and accelerates growth. Built for teams who demand excellence.",
-  keywords: ["SaaS", "automation", "workflow", "productivity", "business tools"],
-  authors: [{ name: "YourSaaS" }],
+  title: "CleanSiteBuilder - AI Website Builder",
+  description: "The AI-powered builder that turns your prompts into production-ready Next.js websites. Deploy instantly to the edge.",
+  keywords: ["SaaS", "automation", "workflow", "productivity", "business tools", "AI website builder", "Next.js"],
+  authors: [{ name: "CleanSiteBuilder" }],
   openGraph: {
-    title: "YourSaaS - Transform Your Business Workflow",
-    description: "The all-in-one platform that automates your processes, streamlines operations, and accelerates growth.",
+    title: "CleanSiteBuilder - AI Website Builder",
+    description: "The AI-powered builder that turns your prompts into production-ready Next.js websites. Deploy instantly to the edge.",
     type: "website",
   },
 };

@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Sparkles } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import Image from "next/image";
 
 export const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -31,11 +32,9 @@ export const Navbar = () => {
             
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:rotate-12 transition-transform">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
+              <Image src="/icon/project-initiation (1).png" alt="Logo" width={40} height={40} className="w-10 h-10 group-hover:rotate-12 transition-transform" />
               <span className="font-bold text-white text-lg tracking-tight">
-                Trogan
+                CleanSiteBuilder
               </span>
             </Link>
 
@@ -60,9 +59,9 @@ export const Navbar = () => {
               >
                 Log in
               </Link>
-              <button className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)]">
+              <Link href="/signup" className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)]">
                 Start Building
-              </button>
+              </Link>
             </div>
 
             {/* Mobile Menu Button */}
@@ -103,9 +102,9 @@ export const Navbar = () => {
               >
                 Log in
               </Link>
-              <button className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors">
+              <Link href="/signup" className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors text-center block">
                 Start Building
-              </button>
+              </Link>
             </div>
           </motion.div>
         )}

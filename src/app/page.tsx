@@ -1,10 +1,10 @@
-import { Navbar } from "@/components/Navbar";
-import { Hero } from "@/components/Hero";
-import { Features } from "@/components/Features";
-import { HowItWorks } from "@/components/HowItWorks";
-import { Showcase } from "@/components/Showcase";
-import { Pricing } from "@/components/Pricing";
-import { Footer } from "@/components/Footer";
+import { Navbar } from "@/landingpage/Navbar";
+import { Hero } from "@/landingpage/Hero";
+import { Features } from "@/landingpage/Features";
+import { HowItWorks } from "@/landingpage/HowItWorks";
+import { Showcase } from "@/landingpage/Showcase";
+import { Pricing } from "@/landingpage/Pricing";
+import { Footer } from "@/landingpage/Footer";
 import { Sparkles } from "lucide-react";
 
 export default function Home() {

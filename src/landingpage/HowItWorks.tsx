@@ -16,7 +16,7 @@ const steps = [
     id: "02",
     icon: <Code2 className="w-6 h-6 text-white" />,
     title: "AI Builds & Optimizes",
-    description: "Trogan generates production-ready Next.js code, fully optimized for SEO, performance, and mobile responsiveness.",
+    description: "CleanSiteBuilder generates production-ready Next.js code, fully optimized for SEO, performance, and mobile responsiveness.",
     color: "bg-purple-500",
   },
   {
