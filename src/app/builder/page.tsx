@@ -1,6 +1,7 @@
 'use client'
 
-import { createProject, getProjects } from '@/app/actions/project-actions'
+import { getDomainStatus } from '@/app/actions/deploy-actions'
+import { createProject, deleteProject, getProjects } from '@/app/actions/project-actions'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { createClient } from '@/utils/supabase/client'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -14,8 +15,7 @@ import {
   MoreVertical,
   Plus,
   Search,
-  Settings,
-  User,
+  Settings, Trash2, User,
   X
 } from 'lucide-react'
 import Image from 'next/image'
@@ -30,6 +30,9 @@ export default function BuilderPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -70,6 +73,28 @@ export default function BuilderPage() {
       alert(result.error)
     }
     setIsCreating(false)
+  }
+
+  const openDeleteModal = (id: string) => {
+    setProjectToDelete(id)
+    setIsDeleteModalOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!projectToDelete) return
+
+    setIsDeleting(true)
+    const result = await deleteProject(projectToDelete)
+
+    if (result.success) {
+      const userProjects = await getProjects()
+      setProjects(userProjects)
+      setIsDeleteModalOpen(false)
+      setProjectToDelete(null)
+    } else {
+      alert(result.error)
+    }
+    setIsDeleting(false)
   }
 
   if (loading) {
@@ -218,6 +243,10 @@ export default function BuilderPage() {
                   title={project.name}
                   lastEdited={new Date(project.updated_at).toLocaleDateString()}
                   status={project.status}
+                  deploymentUrl={project.deployment_url}
+                  customDomain={project.custom_domain}
+                  codeContent={project.code_content}
+                  onDelete={() => openDeleteModal(project.id)}
                 />
               ))}
             </div>
@@ -304,6 +333,53 @@ export default function BuilderPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDeleteModalOpen(false)}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-sm bg-white dark:bg-[#111] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden p-6"
+            >
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/10 flex items-center justify-center mb-4 text-red-600 dark:text-red-500">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Delete Project?</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Are you sure you want to delete this project? This action cannot be undone and all data will be lost.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -321,36 +397,138 @@ function NavItem({ icon, label, active = false, collapsed = false }: { icon: Rea
   )
 }
 
-function ProjectCard({ id, title, lastEdited, status }: { id: string, title: string, lastEdited: string, status: string }) {
+function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomain, codeContent, onDelete }: {
+  id: string,
+  title: string,
+  lastEdited: string,
+  status: string,
+  deploymentUrl?: string,
+  customDomain?: string,
+  codeContent?: string,
+  onDelete: () => void
+}) {
   const router = useRouter()
+  const [domainStatus, setDomainStatus] = useState<'none' | 'verifying' | 'active' | 'error'>('none')
+  const [showMenu, setShowMenu] = useState(false)
+
+  useEffect(() => {
+    if (customDomain) {
+      const checkStatus = async () => {
+        const result = await getDomainStatus(id)
+        if (result.status) {
+          setDomainStatus(result.status as any)
+        }
+      }
+      checkStatus()
+    }
+  }, [customDomain, id])
+
+  // Parse the HTML content for preview
+  const previewHtml = (() => {
+    if (!codeContent) return null
+    try {
+      const files = JSON.parse(codeContent)
+      return files['index.html'] || null
+    } catch {
+      return null
+    }
+  })()
 
   return (
     <motion.div
       whileHover={{ y: -4 }}
       onClick={() => router.push(`/builder/${id}`)}
-      className="group relative aspect-[4/3] rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer"
+      onMouseLeave={() => setShowMenu(false)}
+      className="group relative aspect-[4/3] rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col"
     >
-      {/* Thumbnail Placeholder */}
-      <div className="h-1/2 bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 relative group-hover:bg-gray-200 dark:group-hover:bg-white/10 transition-colors">
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="bg-white dark:bg-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">Edit</button>
-        </div>
-      </div>
+      {/* Website Preview Thumbnail */}
+      <div className="h-1/2 bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 relative overflow-hidden shrink-0">
+        {previewHtml ? (
+          <div className="absolute inset-0 origin-top-left" style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}>
+            <iframe
+              srcDoc={previewHtml}
+              className="w-full h-full border-0 pointer-events-none"
+              title={`Preview of ${title}`}
+              sandbox="allow-same-origin"
+              loading="lazy"
+            />
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-gray-400 dark:text-gray-600">
+              <Layout className="w-8 h-8" />
+            </div>
+          </div>
+        )}
 
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-sm truncate pr-2">{title}</h3>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              // Handle menu click
-            }}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-white"
-          >
-            <MoreVertical className="w-4 h-4" />
+        {/* Hover overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+          <button className="bg-white dark:bg-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity transform scale-90 group-hover:scale-100">
+            Edit
           </button>
         </div>
-        <div className="flex items-center justify-between mt-auto">
+
+        {deploymentUrl && (
+          <div className="absolute top-2 right-2 z-10">
+            <div className="bg-green-500/10 backdrop-blur-md border border-green-500/20 text-green-600 dark:text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              LIVE
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 flex flex-col flex-1 relative">
+        <div className="flex justify-between items-start mb-2">
+          <h3 className="font-bold text-sm truncate pr-2">{title}</h3>
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowMenu(!showMenu)
+              }}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-md hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            <AnimatePresence>
+              {showMenu && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 top-full mt-1 w-32 bg-white dark:bg-[#111] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl z-20 overflow-hidden"
+                >
+                  <button
+                    onClick={() => {
+                      setShowMenu(false)
+                      onDelete()
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Delete
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {customDomain && (
+          <div className="mb-2">
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 bg-gray-100 dark:bg-white/5 px-2 py-1 rounded-md w-fit">
+              <span className={`w-1.5 h-1.5 rounded-full ${domainStatus === 'active' ? 'bg-green-500' :
+                domainStatus === 'verifying' ? 'bg-yellow-500' : 'bg-gray-400'
+                } ${domainStatus !== 'none' ? 'animate-pulse' : ''}`} />
+              <span className="truncate max-w-[120px]">{customDomain}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100 dark:border-white/5">
           <span className="text-xs text-gray-500">{lastEdited}</span>
           <div className="flex items-center gap-1.5">
             <div className={`w-1.5 h-1.5 rounded-full ${status === 'Live' ? 'bg-green-500' : 'bg-yellow-500'}`} />

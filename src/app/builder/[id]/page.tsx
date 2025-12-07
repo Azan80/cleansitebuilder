@@ -1,5 +1,6 @@
 'use client'
 
+import { deployToNetlify, getDomainStatus, updateProjectDomain } from '@/app/actions/deploy-actions'
 import { getProjectFiles } from '@/app/actions/download-actions'
 import { getProjectById } from '@/app/actions/project-actions'
 import { SandpackPreview } from '@/components/SandpackPreview'
@@ -8,9 +9,12 @@ import { saveAs } from 'file-saver'
 import { AnimatePresence, motion } from 'framer-motion'
 import JSZip from 'jszip'
 import {
+    Brain,
     ChevronLeft,
     Code,
     Download,
+    ExternalLink,
+    Globe,
     Maximize2,
     Monitor,
     Rocket,
@@ -19,7 +23,8 @@ import {
     Share2,
     Smartphone,
     Sparkles,
-    Tablet
+    Tablet,
+    X
 } from 'lucide-react'
 import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
@@ -37,20 +42,36 @@ export default function ProjectEditorPage() {
     const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
     const [version, setVersion] = useState(0)
     const [isViewCodeOpen, setIsViewCodeOpen] = useState(false)
-    const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string }>>([
-        { role: 'ai', content: 'Hello! I\'m your AI web builder. Describe the website you want to create, and I\'ll build it for you instantly.' }
-    ])
+    const [isFullScreen, setIsFullScreen] = useState(false)
+    const [isDeploying, setIsDeploying] = useState(false)
+    const [isDomainModalOpen, setIsDomainModalOpen] = useState(false)
+    const [customDomain, setCustomDomain] = useState('')
+    const [isConnectingDomain, setIsConnectingDomain] = useState(false)
+    const [dnsInstructions, setDnsInstructions] = useState<{ domain: string, target: string } | null>(null)
+    const [domainStatus, setDomainStatus] = useState<'none' | 'verifying' | 'active' | 'error'>('none')
+    const [reasoning, setReasoning] = useState('')
+    const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string }>>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
-
     useEffect(() => {
         const fetchProject = async () => {
             if (params.id) {
                 const data = await getProjectById(params.id as string)
                 if (data) {
                     setProject(data)
-                    if (data.code_content) {
-                        // If there is existing code, add a message about it
-                        setMessages(prev => [...prev, { role: 'ai', content: 'I loaded your existing project code.' }])
+
+                    // Fetch chat history
+                    const { createClient } = await import('@/utils/supabase/client')
+                    const supabase = createClient()
+                    const { data: history } = await supabase
+                        .from('messages')
+                        .select('*')
+                        .eq('project_id', params.id)
+                        .order('created_at', { ascending: true })
+
+                    if (history && history.length > 0) {
+                        setMessages(history.map(m => ({ role: m.role as 'user' | 'ai', content: m.content })))
+                    } else {
+                        setMessages([{ role: 'ai', content: 'Hello! I\'m your AI web builder. Describe the website you want to create, and I\'ll build it for you instantly.' }])
                     }
                 } else {
                     router.push('/builder')
@@ -65,69 +86,117 @@ export default function ProjectEditorPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
+    // Poll for domain status
+    useEffect(() => {
+        let interval: NodeJS.Timeout
+        if (isDomainModalOpen && project?.custom_domain) {
+            const checkStatus = async () => {
+                const result = await getDomainStatus(project.id)
+                if (result.status) {
+                    setDomainStatus(result.status as any)
+                }
+            }
+            checkStatus()
+            interval = setInterval(checkStatus, 5000)
+        }
+        return () => clearInterval(interval)
+    }, [isDomainModalOpen, project?.custom_domain, project?.id])
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!prompt.trim() || isGenerating) return
 
-        const userMessage = prompt
+        const userMessage = prompt.trim()
         const newMessages = [...messages, { role: 'user' as const, content: userMessage }]
         setMessages(newMessages)
         setPrompt('')
         setIsGenerating(true)
+        setReasoning('')
 
         try {
-            // Import the new generation action
             const { startWebsiteGeneration, getGenerationStatus } = await import('@/app/actions/ai-generation')
 
-            // Start generation
-            const result = await startWebsiteGeneration(userMessage, project.id, project.code_content)
+            const result = await startWebsiteGeneration(userMessage, project.id, project.code_content, newMessages)
 
             if (!result.success || !result.jobId) {
-                setMessages([...newMessages, { role: 'ai', content: `Sorry, something went wrong: ${result.error}` }])
+                setMessages(prev => [...prev, { role: 'ai', content: `❌ Sorry, something went wrong: ${result.error || 'Unknown error'}. Please try again.` }])
                 setIsGenerating(false)
                 return
             }
 
-            // Add progress message
-            setMessages([...newMessages, { role: 'ai', content: 'Starting generation...' }])
+            // Add initial progress message
+            setMessages(prev => [...prev, { role: 'ai', content: '🚀 Starting generation...' }])
 
             // Poll for status
             const jobId = result.jobId
             let completed = false
             let lastProgress = 0
+            let consecutiveErrors = 0
 
             while (!completed) {
-                await new Promise(resolve => setTimeout(resolve, 1000)) // Poll every second
+                await new Promise(resolve => setTimeout(resolve, 1000))
 
                 const status = await getGenerationStatus(jobId)
 
                 if (!status) {
-                    setMessages([...newMessages, { role: 'ai', content: 'Error: Could not get generation status' }])
-                    break
+                    consecutiveErrors++
+                    if (consecutiveErrors > 10) {
+                        setMessages(prev => [...prev.slice(0, -1), { role: 'ai', content: '⚠️ Lost connection to generation process. Please refresh and try again.' }])
+                        break
+                    }
+                    continue
                 }
+                consecutiveErrors = 0 // Reset on successful fetch
 
                 // Update progress message
-                if (status.progress > lastProgress) {
-                    const progressMsg = `${status.currentStep} (${status.progress}%)`
-                    setMessages([...newMessages, { role: 'ai', content: progressMsg }])
+                if (status.progress > lastProgress || status.currentStep) {
+                    const progressMsg = `${status.currentStep || 'Working...'} (${status.progress}%)`
+                    setMessages(prev => {
+                        const newMsgs = [...prev]
+                        if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === 'ai') {
+                            newMsgs[newMsgs.length - 1].content = progressMsg
+                        }
+                        return newMsgs
+                    })
                     lastProgress = status.progress
+                }
+
+                // Update reasoning display
+                if (status.files && status.files['_reasoning']) {
+                    setReasoning(status.files['_reasoning'])
                 }
 
                 if (status.status === 'completed') {
                     completed = true
-                    if (status.files) {
-                        setProject((prev: any) => ({ ...prev, code_content: JSON.stringify(status.files) }))
+                    if (status.files && Object.keys(status.files).filter(k => k !== '_reasoning').length > 0) {
+                        // Create clean files object without _reasoning
+                        const cleanFiles = { ...status.files }
+                        delete cleanFiles['_reasoning']
+
+                        setProject((prev: any) => ({
+                            ...prev,
+                            code_content: JSON.stringify(cleanFiles)
+                        }))
                         setVersion(v => v + 1)
-                        setMessages([...newMessages, { role: 'ai', content: '✅ Website generated successfully! Check out the preview.' }])
+
+                        const fileCount = Object.keys(cleanFiles).length
+                        setMessages(prev => [...prev.slice(0, -1), {
+                            role: 'ai',
+                            content: `✅ Done! Generated ${fileCount} file${fileCount > 1 ? 's' : ''}. Check out the preview!`
+                        }])
+                        setReasoning('')
+                    } else {
+                        setMessages(prev => [...prev.slice(0, -1), { role: 'ai', content: '⚠️ Generation completed but no files were created. Please try with a different prompt.' }])
                     }
                 } else if (status.status === 'error') {
                     completed = true
-                    setMessages([...newMessages, { role: 'ai', content: `❌ Error: ${status.error}` }])
+                    setMessages(prev => [...prev.slice(0, -1), { role: 'ai', content: `❌ Error: ${status.error || 'Unknown error'}. Try a simpler request or be more specific.` }])
+                    setReasoning('')
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Handle Message Error:', error)
-            setMessages([...newMessages, { role: 'ai', content: 'An unexpected error occurred.' }])
+            setMessages(prev => [...prev, { role: 'ai', content: `❌ An error occurred: ${error.message || 'Please try again.'}` }])
         } finally {
             setIsGenerating(false)
         }
@@ -165,6 +234,80 @@ export default function ProjectEditorPage() {
                 <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             </div>
         )
+    }
+
+    const previewFiles = (() => {
+        try {
+            const aiFiles = project?.code_content ? JSON.parse(project.code_content) : {
+                "/app/page.tsx": `export default function Page() {
+  return (
+    <div className="flex items-center justify-center h-screen bg-white">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Welcome to Your Project</h1>
+        <p className="text-gray-600 mb-8">Start by describing what you want to build in the chat</p>
+      </div>
+    </div>
+  )
+}`
+            }
+            return aiFiles
+        } catch (e) {
+            console.error('Error parsing code_content:', e)
+            return {
+                "/app/page.tsx": `export default function Page() { return <div className="p-8">Error loading preview</div> }`
+            }
+        }
+    })()
+
+    const handleOpenNewTab = () => {
+        if (previewFiles['index.html']) {
+            const blob = new Blob([previewFiles['index.html']], { type: 'text/html' })
+            const url = URL.createObjectURL(blob)
+            window.open(url, '_blank')
+        } else {
+            alert('This feature is only available for static HTML projects.')
+        }
+    }
+
+    const handleDeploy = async () => {
+        if (!project?.id || isDeploying) return
+
+        setIsDeploying(true)
+        try {
+            const result = await deployToNetlify(project.id)
+            if (result.success && result.url) {
+                window.open(result.url, '_blank')
+                setMessages(prev => [...prev, { role: 'ai', content: `🚀 Website deployed successfully! View it here: ${result.url}` }])
+                setProject((prev: any) => ({ ...prev, deployment_url: result.url }))
+            } else {
+                alert('Deployment failed: ' + result.error)
+            }
+        } catch (error) {
+            console.error('Deploy error:', error)
+            alert('Failed to deploy project')
+        } finally {
+            setIsDeploying(false)
+        }
+    }
+
+    const handleConnectDomain = async () => {
+        if (!customDomain) return
+        setIsConnectingDomain(true)
+        try {
+            const result = await updateProjectDomain(project.id, customDomain)
+            if (result.success) {
+                setProject((prev: any) => ({ ...prev, deployment_url: result.url, custom_domain: customDomain }))
+                setDnsInstructions({ domain: customDomain, target: result.cnameTarget })
+                // Don't close modal yet, show instructions
+            } else {
+                alert('Failed to connect domain: ' + result.error)
+            }
+        } catch (error) {
+            console.error('Domain connection error:', error)
+            alert('Failed to connect domain')
+        } finally {
+            setIsConnectingDomain(false)
+        }
     }
 
     return (
@@ -225,9 +368,37 @@ export default function ProjectEditorPage() {
                         <Download className="w-4 h-4" />
                         <span className="hidden sm:inline">Download</span>
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20">
-                        <Rocket className="w-4 h-4" />
-                        <span className="hidden sm:inline">Deploy</span>
+                    {project?.deployment_url && (
+                        <a
+                            href={project.deployment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-green-500/20"
+                        >
+                            <ExternalLink className="w-4 h-4" />
+                            <span className="hidden sm:inline">View Live</span>
+                        </a>
+                    )}
+                    {project?.deployment_url && (
+                        <button
+                            onClick={() => setIsDomainModalOpen(true)}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500"
+                            title="Connect Domain"
+                        >
+                            <Globe className="w-4 h-4" />
+                        </button>
+                    )}
+                    <button
+                        onClick={handleDeploy}
+                        disabled={isDeploying}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
+                    >
+                        {isDeploying ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <Rocket className="w-4 h-4" />
+                        )}
+                        <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
                     </button>
                 </div>
             </header>
@@ -261,22 +432,58 @@ export default function ProjectEditorPage() {
                             </motion.div>
                         ))}
                         {isGenerating && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
-                                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                                </div>
-                                <div className="bg-gray-100 dark:bg-white/5 p-3 rounded-2xl rounded-tl-none flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]" />
-                                </div>
-                            </motion.div>
+                            <div className="space-y-4">
+                                {reasoning && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        className="bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden"
+                                    >
+                                        <div className="flex items-center gap-2 p-3 border-b border-gray-200 dark:border-white/10 bg-gray-100/50 dark:bg-white/5">
+                                            <Brain className="w-4 h-4 text-indigo-500 animate-pulse" />
+                                            <span className="text-xs font-medium text-gray-500">AI Thinking Process</span>
+                                        </div>
+                                        <div className="p-3 max-h-40 overflow-y-auto text-xs text-gray-500 font-mono whitespace-pre-wrap leading-relaxed">
+                                            {reasoning}
+                                        </div>
+                                    </motion.div>
+                                )}
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
+                                        <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <div className="bg-gray-100 dark:bg-white/5 p-3 rounded-2xl rounded-tl-none flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                                    </div>
+                                </motion.div>
+                            </div>
                         )}
                         <div ref={messagesEndRef} />
                     </div>
 
                     {/* Input Area */}
                     <div className="p-4 border-t border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a]">
+                        {/* Quick Prompt Suggestions */}
+                        {!isGenerating && messages.length > 1 && (
+                            <div className="flex flex-wrap gap-2 mb-3">
+                                {[
+                                    'Add a contact form',
+                                    'Create an about page',
+                                    'Add more animations',
+                                    'Change the color scheme'
+                                ].map((suggestion, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setPrompt(suggestion)}
+                                        className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-full text-gray-600 dark:text-gray-400 transition-colors"
+                                    >
+                                        {suggestion}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <form onSubmit={handleSendMessage} className="relative">
                             <textarea
                                 value={prompt}
@@ -287,8 +494,8 @@ export default function ProjectEditorPage() {
                                         handleSendMessage(e)
                                     }
                                 }}
-                                placeholder="Describe changes or new sections..."
-                                className="w-full bg-gray-500 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none h-[52px] max-h-32"
+                                placeholder={messages.length <= 1 ? "Describe the website you want to create..." : "Describe changes or new sections..."}
+                                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none h-[52px] max-h-32 placeholder:text-gray-400"
                             />
                             <button
                                 type="submit"
@@ -299,7 +506,7 @@ export default function ProjectEditorPage() {
                             </button>
                         </form>
                         <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400">
-                            <span>AI can make mistakes. Review generated code.</span>
+                            <span>Tip: Be specific! "Add a pricing section with 3 tiers" works better than "add pricing"</span>
                             <span>Enter to send</span>
                         </div>
                     </div>
@@ -324,7 +531,18 @@ export default function ProjectEditorPage() {
                             >
                                 <Code className="w-3.5 h-3.5" />
                             </button>
-                            <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-500" title="Full Screen">
+                            <button
+                                onClick={handleOpenNewTab}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-500"
+                                title="Open in New Tab"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                onClick={() => setIsFullScreen(true)}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-500"
+                                title="Full Screen"
+                            >
                                 <Maximize2 className="w-3.5 h-3.5" />
                             </button>
                         </div>
@@ -358,30 +576,7 @@ export default function ProjectEditorPage() {
 
                             {/* Preview Content (Sandpack) */}
                             <div className="flex-1 bg-white relative group h-full">
-                                <SandpackPreview
-                                    files={(() => {
-                                        try {
-                                            const aiFiles = project?.code_content ? JSON.parse(project.code_content) : {
-                                                "/app/page.tsx": `export default function Page() {
-  return (
-    <div className="flex items-center justify-center h-screen bg-white">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Welcome to Your Project</h1>
-        <p className="text-gray-600 mb-8">Start by describing what you want to build in the chat</p>
-      </div>
-    </div>
-  )
-}`
-                                            }
-                                            return aiFiles
-                                        } catch (e) {
-                                            console.error('Error parsing code_content:', e)
-                                            return {
-                                                "/app/page.tsx": `export default function Page() { return <div className="p-8">Error loading preview</div> }`
-                                            }
-                                        }
-                                    })()}
-                                />
+                                <SandpackPreview files={previewFiles} />
                             </div>
                         </motion.div>
                     </div>
@@ -412,6 +607,144 @@ export default function ProjectEditorPage() {
                                     {project?.code_content || 'No code generated yet.'}
                                 </pre>
                             </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {isFullScreen && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        className="fixed inset-0 z-[100] bg-white dark:bg-[#0a0a0a] flex flex-col"
+                    >
+                        <div className="h-14 border-b border-gray-200 dark:border-white/10 flex items-center justify-between px-6 bg-white dark:bg-[#0a0a0a]">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setIsFullScreen(false)}
+                                    className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <span className="font-medium">Full Screen Preview</span>
+                            </div>
+                            <button
+                                onClick={() => setIsFullScreen(false)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 bg-gray-100 dark:bg-[#111] p-4 md:p-8 overflow-hidden">
+                            <div className="w-full h-full bg-white dark:bg-[#0a0a0a] rounded-lg shadow-2xl overflow-hidden border border-gray-200 dark:border-white/10">
+                                <SandpackPreview files={previewFiles} />
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {isDomainModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                        <div
+                            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                            onClick={() => setIsDomainModalOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="relative w-full max-w-md bg-white dark:bg-[#1e1e1e] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-6"
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-medium">
+                                    {dnsInstructions ? 'Configure DNS' : 'Connect Custom Domain'}
+                                </h3>
+                                <button onClick={() => { setIsDomainModalOpen(false); setDnsInstructions(null); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {dnsInstructions ? (
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                                        <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                                            To finish connecting <strong>{dnsInstructions.domain}</strong>, please add the following CNAME record to your DNS provider:
+                                        </p>
+                                        <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
+                                            <div className="font-medium text-gray-500">Type:</div>
+                                            <div className="font-mono font-bold">CNAME</div>
+
+                                            <div className="font-medium text-gray-500">Name:</div>
+                                            <div className="font-mono font-bold">www</div>
+
+                                            <div className="font-medium text-gray-500">Value:</div>
+                                            <div className="font-mono font-bold select-all bg-white dark:bg-black/20 px-1 rounded">
+                                                {dnsInstructions.target}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => { setIsDomainModalOpen(false); setDnsInstructions(null); }}
+                                        className="w-full px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                                    >
+                                        I've Added the Record
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    {project?.custom_domain && (
+                                        <div className="mb-6 p-4 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm font-medium text-gray-500">Current Domain</span>
+                                                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${domainStatus === 'active' ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400' :
+                                                    domainStatus === 'verifying' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400' :
+                                                        'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400'
+                                                    }`}>
+                                                    {domainStatus === 'active' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+                                                    {domainStatus === 'verifying' && <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />}
+                                                    {domainStatus === 'active' ? 'Active' : domainStatus === 'verifying' ? 'Verifying' : 'Unknown'}
+                                                </div>
+                                            </div>
+                                            <div className="font-mono text-lg font-bold">{project.custom_domain}</div>
+                                            {domainStatus === 'verifying' && (
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    We are verifying your DNS settings. This can take up to 24 hours.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                    <p className="text-sm text-gray-500 mb-4">
+                                        Enter your custom domain (e.g., www.example.com). You will need to configure your DNS settings separately.
+                                    </p>
+                                    <input
+                                        type="text"
+                                        value={customDomain}
+                                        onChange={(e) => setCustomDomain(e.target.value)}
+                                        placeholder="www.yourdomain.com"
+                                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 mb-4 outline-none focus:border-indigo-500"
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                        <button
+                                            onClick={() => setIsDomainModalOpen(false)}
+                                            className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleConnectDomain}
+                                            disabled={isConnectingDomain || !customDomain}
+                                            className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white rounded-lg flex items-center gap-2"
+                                        >
+                                            {isConnectingDomain && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                                            Connect
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </motion.div>
                     </div>
                 )}

@@ -84,3 +84,27 @@ export async function getProjectById(id: string) {
 
   return data
 }
+
+export async function deleteProject(id: string) {
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: 'User not authenticated' }
+  }
+
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  if (error) {
+    console.error('Error deleting project:', error)
+    return { error: error.message }
+  }
+
+  revalidatePath('/builder')
+  return { success: true }
+}

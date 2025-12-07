@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  <img src="public/icon/project-initiation (1).png" alt="CleanSite Builder" width="80" height="80">
+  <h1>CleanSite Builder</h1>
+  <p><strong>AI-Powered Website Builder</strong></p>
+  
+  ![Next.js](https://img.shields.io/badge/Next.js-16.0-black?logo=next.js)
+  ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)
+  ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?logo=tailwind-css)
+  ![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20DB-3ECF8E?logo=supabase)
+  ![Status](https://img.shields.io/badge/Status-In%20Development-yellow)
+</div>
 
-## Getting Started
+---
 
-First, run the development server:
+## ✨ Features
+
+- 🤖 **AI Website Generation** - Describe your site, AI builds it instantly
+- 📝 **Live Editing** - Edit and update websites with natural language prompts
+- 📱 **Responsive Preview** - Desktop, tablet, and mobile viewport switching
+- 🚀 **One-Click Deploy** - Deploy to Netlify with custom domain support
+- 🎨 **Modern UI** - Built with Tailwind CSS, Bootstrap, and animations
+- 🔐 **User Auth** - Secure authentication via Supabase
+
+## 🛠️ Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| Framework | Next.js 16 (App Router) |
+| AI | DeepSeek API |
+| Database | Supabase |
+| Styling | Tailwind CSS + Bootstrap |
+| Deployment | Netlify |
+| Animations | Framer Motion, AOS, Animate.css |
+
+## 🚀 Quick Start
 
 ```bash
-npm run dev
-# or
+# Clone the repo
+git clone https://github.com/Azan80/cleansitebuilder.git
+cd cleansitebuilder
+
+# Install dependencies
+yarn install
+
+# Set up environment variables
+cp .env.example .env.local
+# Add your API keys to .env.local
+
+# Run development server
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## ⚙️ Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+DEEPSEEK_API_KEY=your_deepseek_api_key
+NETLIFY_ACCESS_TOKEN=your_netlify_token
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📂 Project Structure
 
-## Learn More
+```
+src/
+├── app/
+│   ├── builder/        # Dashboard & Editor
+│   ├── actions/        # Server Actions (AI, Deploy, Projects)
+│   └── (auth)/         # Login, Signup, Password Reset
+├── components/         # Reusable UI Components
+├── landingpage/        # Landing Page Sections
+└── utils/              # Supabase Client
+```
 
-To learn more about Next.js, take a look at the following resources:
+## 📋 Current Status
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [x] AI Website Generation
+- [x] Multi-page Support
+- [x] Live Preview with Sandpack
+- [x] Netlify Deployment
+- [x] Custom Domain Support
+- [x] Website Thumbnail Previews
+- [ ] Template Gallery
+- [ ] Team Collaboration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📄 License
 
-## Deploy on Vercel
+MIT © 2025 CleanSite Builder
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+<div align="center">
+  <sub>Built with ❤️ using Next.js and AI</sub>
+</div>
