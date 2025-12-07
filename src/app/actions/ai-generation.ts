@@ -1,329 +1,500 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
-import OpenAI from 'openai'
+import { createClient } from '@/utils/supabase/server';
+import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  apiKey: process.env.NEXT_OPENAI_KEY || process.env.OPENAI_API_KEY,
+  apiKey: process.env.DEEPSEEK_API_KEY || process.env.NEXT_OPENAI_KEY || process.env.OPENAI_API_KEY,
+  baseURL: 'https://api.deepseek.com'
 })
 
-export type GenerationStatus = {
-  status: 'pending' | 'generating' | 'completed' | 'error'
-  progress: number
-  currentStep: string
-  files?: Record<string, string>
-  error?: string
-}
+export type GenerationJob = {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  currentStep: string;
+  progress: number;
+  files: Record<string, string>;
+  error?: string;
+};
 
-// Start generation and return a job ID
-export async function startWebsiteGeneration(prompt: string, projectId: string, currentCode?: string) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+export async function startWebsiteGeneration(
+  prompt: string,
+  projectId: string,
+  currentCode: string | undefined,
+  history: Array<{ role: 'user' | 'ai', content: string }> = []
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
-
-    // Create a generation job
-    const jobId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    // Store initial status
-    await supabase
-      .from('generation_jobs')
-      .insert({
-        id: jobId,
-        project_id: projectId,
-        user_id: user.id,
-        status: 'pending',
-        progress: 0,
-        current_step: 'Initializing...',
-        prompt: prompt,
-        current_code: currentCode
-      })
-
-    // Start generation in background (we'll poll for status)
-    generateInBackground(jobId, prompt, projectId, currentCode, user.id)
-
-    return { success: true, jobId }
-  } catch (error: any) {
-    console.error('Error starting generation:', error)
-    return { error: error.message || 'Failed to start generation' }
+  if (!user) {
+    return { success: false, error: 'Unauthorized' }
   }
+
+  // 1. Save User Message to DB
+  await supabase.from('messages').insert({
+    project_id: projectId,
+    role: 'user',
+    content: prompt
+  })
+
+  const jobId = crypto.randomUUID()
+  
+  // 2. Create initial job status in DB
+  const { error } = await supabase
+    .from('generation_jobs')
+    .insert({
+      id: jobId,
+      project_id: projectId,
+      user_id: user.id,
+      status: 'pending',
+      current_step: 'Starting...',
+      progress: 0,
+      files: {}
+    })
+
+  if (error) {
+    console.error('Failed to create job:', error)
+    return { success: false, error: error.message }
+  }
+
+  // Start background generation (fire and forget)
+  generateInBackground(jobId, prompt, projectId, currentCode, user.id, history).catch(console.error)
+
+  return { success: true, jobId }
 }
 
-// Background generation function with multi-step process for high quality
 async function generateInBackground(
   jobId: string,
   prompt: string,
   projectId: string,
   currentCode: string | undefined,
-  userId: string
+  userId: string,
+  history: Array<{ role: 'user' | 'ai', content: string }>
 ) {
   const supabase = await createClient()
 
+  const updateStatus = async (status: Partial<GenerationJob>) => {
+    const dbUpdates: any = { updated_at: new Date().toISOString() }
+    if (status.status) dbUpdates.status = status.status
+    if (status.currentStep) dbUpdates.current_step = status.currentStep
+    if (status.progress !== undefined) dbUpdates.progress = status.progress
+    if (status.files) dbUpdates.files = status.files
+    if (status.error) dbUpdates.error = status.error
+    
+    await supabase
+      .from('generation_jobs')
+      .update(dbUpdates)
+      .eq('id', jobId)
+  }
+
   try {
-    // STEP 1: Planning Phase (0-15%)
-    await updateJobStatus(jobId, {
-      status: 'generating',
-      progress: 5,
-      currentStep: 'Analyzing requirements and planning architecture...'
+    // Determine if this is a new project or modification
+    let existingFiles: Record<string, string> = {}
+    let isModification = false
+    
+    console.log('[AI-GEN] currentCode exists:', !!currentCode)
+    console.log('[AI-GEN] currentCode length:', currentCode?.length || 0)
+    
+    if (currentCode) {
+      try {
+        existingFiles = JSON.parse(currentCode)
+        console.log('[AI-GEN] Parsed existing files:', Object.keys(existingFiles))
+        // Check if we have actual content (not just the default placeholder)
+        const hasRealContent = Object.keys(existingFiles).some(key => 
+          key !== '_reasoning' && existingFiles[key] && existingFiles[key].length > 100
+        )
+        isModification = hasRealContent
+        console.log('[AI-GEN] hasRealContent:', hasRealContent, 'isModification:', isModification)
+      } catch (e) {
+        // If parsing fails, treat as new project
+        console.log('[AI-GEN] Failed to parse currentCode:', e)
+        existingFiles = {}
+      }
+    }
+
+    // Choose model based on task complexity
+    const model = isModification ? "deepseek-chat" : "deepseek-reasoner"
+
+    await updateStatus({
+      status: 'processing',
+      progress: 10,
+      currentStep: isModification ? 'Analyzing your changes...' : 'Understanding your requirements...'
     })
 
-    const planningPrompt = `You are a senior web architect. Analyze this request and create a detailed plan:
+    // Build a comprehensive system prompt
+    const systemPrompt = buildSystemPrompt(isModification, existingFiles)
 
-Request: "${prompt}"
-${currentCode ? `\nCurrent structure: ${currentCode}` : ''}
+    // Build the user message with proper context
+    const userMessage = buildUserMessage(prompt, isModification, existingFiles)
 
-Create a JSON plan with:
-1. "pages" - List of pages needed (e.g., ["home", "about", "contact"])
-2. "components" - List of reusable components (e.g., ["Header", "Footer", "Hero", "Features"])
-3. "features" - Key features to implement
-4. "colorScheme" - Suggested color palette
-5. "layout" - Layout structure description
+    // Build API messages - only include relevant history
+    const relevantHistory = history.slice(-6) // Last 3 exchanges
+    const apiMessages = [
+      { role: "system", content: systemPrompt },
+      ...relevantHistory
+        .filter(msg => msg.content && !msg.content.startsWith('Starting generation') && !msg.content.includes('%'))
+        .map(msg => ({ 
+          role: msg.role === 'ai' ? 'assistant' : 'user', 
+          content: msg.content 
+        })),
+      { role: "user", content: userMessage }
+    ]
 
-Return ONLY valid JSON.`
+    await updateStatus({
+      progress: 20,
+      currentStep: isModification ? 'Applying your changes...' : 'Designing your website...'
+    })
 
-    const planResponse = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: planningPrompt }],
+    const stream = await openai.chat.completions.create({
+      model: model,
+      messages: apiMessages as any,
+      stream: true,
+      max_tokens: 8192,
       temperature: 0.7,
-      response_format: { type: "json_object" }
-    })
+      response_format: { type: "json_object" },
+      ...(model === 'deepseek-reasoner' ? { extra_body: { thinking: { type: "enabled" } } } : {})
+    } as any) as unknown as AsyncIterable<any>
 
-    const plan = JSON.parse(planResponse.choices[0].message.content || '{}')
-    console.log('Generation plan:', plan)
+    let fullContent = ''
+    let fullReasoning = ''
+    let lastUpdate = Date.now()
 
-    await updateJobStatus(jobId, {
-      progress: 15,
-      currentStep: 'Plan created. Generating layout structure...'
-    })
-
-    // STEP 2: Generate Layout & Root Files (15-30%)
-    const layoutPrompt = `You are an expert Next.js 14 developer. Create a professional root layout.
-
-Project Plan: ${JSON.stringify(plan)}
-
-Generate ONLY these files as JSON:
-{
-  "/app/layout.tsx": "...",
-  "/app/globals.css": "..."
-}
-
-Requirements:
-- Modern, professional design
-- Proper TypeScript types
-- Include metadata (title, description)
-- Set up Tailwind CSS properly
-- Use the suggested color scheme: ${plan.colorScheme || 'modern and professional'}
-- Include font optimization (Inter or similar)
-- Do NOT use CSS modules (*.module.css). Use Tailwind CSS only.
-
-Return ONLY valid JSON with file paths as keys.`
-
-    const layoutResponse = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: layoutPrompt }],
-      temperature: 0.7,
-      response_format: { type: "json_object" }
-    })
-
-    let allFiles = JSON.parse(layoutResponse.choices[0].message.content || '{}')
-
-    await updateJobStatus(jobId, {
-      progress: 30,
-      currentStep: 'Layout created. Building reusable components...'
-    })
-
-    // STEP 3: Generate Components (30-60%)
-    const components = plan.components || ['Header', 'Footer']
-    const componentProgress = 30
-    const progressPerComponent = 30 / components.length
-
-    for (let i = 0; i < components.length; i++) {
-      const component = components[i]
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta as any
       
-      await updateJobStatus(jobId, {
-        progress: Math.round(componentProgress + (i * progressPerComponent)),
-        currentStep: `Creating ${component} component...`
-      })
-
-      const componentPrompt = `Create a professional, reusable ${component} component for a Next.js 14 project.
-
-Project context: ${prompt}
-Color scheme: ${plan.colorScheme || 'modern'}
-Style: Professional, modern, clean
-
-Generate as JSON:
-{
-  "/components/${component}.tsx": "..."
-}
-
-IMPORTANT RULES:
-- File MUST be at /components/${component}.tsx
-- Use TypeScript with proper types
-- Use Tailwind CSS for styling
-- Use lucide-react for icons (import { IconName } from 'lucide-react')
-- Make it responsive (mobile-first)
-- Add smooth animations with framer-motion if appropriate
-- Export as: export function ${component}() { ... } or export default function ${component}() { ... }
-- Do NOT import from /ui/ or other directories
-- Do NOT use @/ imports
-- Only import from 'react', 'lucide-react', 'framer-motion', or other /components/ files
-
-Return ONLY valid JSON.`
-
-      const componentResponse = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: componentPrompt }],
-        temperature: 0.8,
-        response_format: { type: "json_object" }
-      })
-
-      const componentFiles = JSON.parse(componentResponse.choices[0].message.content || '{}')
-      allFiles = { ...allFiles, ...componentFiles }
+      if (delta?.reasoning_content) {
+        fullReasoning += delta.reasoning_content
+        
+        if (Date.now() - lastUpdate > 500) {
+          await updateStatus({ 
+            files: { '_reasoning': fullReasoning } as any,
+            currentStep: 'Thinking through the design...',
+            progress: 25
+          })
+          lastUpdate = Date.now()
+        }
+      } else if (delta?.content) {
+        fullContent += delta.content
+        
+        if (Date.now() - lastUpdate > 500) {
+          const progress = 40 + Math.min(50, Math.floor(fullContent.length / 200))
+          await updateStatus({
+            currentStep: 'Writing code...',
+            progress: progress
+          })
+          lastUpdate = Date.now()
+        }
+      }
     }
 
-    await updateJobStatus(jobId, {
-      progress: 60,
-      currentStep: 'Components ready. Building main page...'
+    await updateStatus({ 
+      progress: 92, 
+      currentStep: 'Processing output...',
+      files: { '_reasoning': fullReasoning } as any
     })
 
-    // STEP 4: Generate Main Page (60-75%)
-    const pagePrompt = `Create a stunning, professional main page that integrates all components.
+    // Parse and validate the JSON output
+    const files = parseAIOutput(fullContent, existingFiles, isModification)
 
-Request: "${prompt}"
-Available components: ${components.join(', ')}
-Color scheme: ${plan.colorScheme || 'modern'}
-Features to include: ${(plan.features || []).join(', ')}
-
-Generate as JSON:
-{
-  "/app/page.tsx": "..."
-}
-
-Requirements:
-- Import and use the components from /components/
-- Create a cohesive, professional design
-- Use proper TypeScript types
-- Implement all requested features
-- Make it responsive and mobile-friendly
-- Add smooth scroll animations
-- Use modern UI patterns
-- Include proper spacing and typography
-- Make it visually stunning
-
-Return ONLY valid JSON.`
-
-    const pageResponse = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: pagePrompt }],
-      temperature: 0.8,
-      response_format: { type: "json_object" }
-    })
-
-    const pageFiles = JSON.parse(pageResponse.choices[0].message.content || '{}')
-    allFiles = { ...allFiles, ...pageFiles }
-
-    await updateJobStatus(jobId, {
-      progress: 75,
-      currentStep: 'Refining design and adding polish...'
-    })
-
-    // STEP 5: Quality Enhancement (75-90%)
-    const enhancementPrompt = `Review and enhance this Next.js project for maximum quality.
-
-Current files: ${JSON.stringify(allFiles)}
-
-Improve:
-1. Add missing TypeScript types
-2. Enhance Tailwind styling for premium look
-3. Add micro-interactions and animations
-4. Ensure responsive design
-5. Add proper accessibility attributes
-6. Optimize component structure
-
-Return the COMPLETE improved file structure as JSON with ALL files.`
-
-    const enhancementResponse = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: enhancementPrompt }],
-      temperature: 0.6,
-      response_format: { type: "json_object" }
-    })
-
-    allFiles = JSON.parse(enhancementResponse.choices[0].message.content || '{}')
-
-    await updateJobStatus(jobId, {
-      progress: 90,
-      currentStep: 'Finalizing and saving...'
-    })
-
-    // Ensure required files exist
-    if (!allFiles['/app/page.tsx']) {
-      allFiles['/app/page.tsx'] = `export default function Page() {
-  return (
-    <div className="min-h-screen p-8">
-      <h1 className="text-4xl font-bold">Welcome</h1>
-      <p className="mt-4 text-gray-600">Your professional website</p>
-    </div>
-  )
-}`
+    // Validate that we have meaningful content
+    if (!files || Object.keys(files).filter(k => k !== '_reasoning').length === 0) {
+      throw new Error('AI did not generate any files')
     }
 
-    if (!allFiles['/app/layout.tsx']) {
-      allFiles['/app/layout.tsx'] = `export const metadata = {
-  title: 'Professional Website',
-  description: 'Built with Next.js',
-}
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="en">
-      <body className="antialiased">{children}</body>
-    </html>
-  )
-}`
+    // Check for valid HTML in index.html
+    if (files['index.html'] && !files['index.html'].includes('<!DOCTYPE') && !files['index.html'].includes('<html')) {
+      throw new Error('Generated HTML appears to be incomplete')
     }
 
     // Save to project
-    const { error: saveError } = await supabase
+    await supabase
       .from('projects')
       .update({ 
-        code_content: JSON.stringify(allFiles),
+        code_content: JSON.stringify(files),
         updated_at: new Date().toISOString()
       })
       .eq('id', projectId)
       .eq('user_id', userId)
 
-    if (saveError) {
-      throw new Error('Failed to save project')
-    }
+    // Save AI success message to DB
+    await supabase.from('messages').insert({
+      project_id: projectId,
+      role: 'ai',
+      content: 'Website updated successfully!'
+    })
 
-    // Mark as completed
-    await updateJobStatus(jobId, {
+    await updateStatus({
       status: 'completed',
       progress: 100,
-      currentStep: '✨ Professional website generated!',
-      files: allFiles
+      currentStep: 'Done!',
+      files: files as any
     })
 
   } catch (error: any) {
-    console.error('Generation error:', error)
-    await updateJobStatus(jobId, {
+    console.error('Generation Error:', error)
+    
+    // Save error message to chat
+    await supabase.from('messages').insert({
+      project_id: projectId,
+      role: 'ai',
+      content: `Sorry, I encountered an error: ${error.message}. Please try again with a simpler request.`
+    })
+
+    await updateStatus({
       status: 'error',
-      currentStep: 'Error occurred',
-      error: error.message || 'Generation failed'
+      error: error.message || 'Unknown error occurred',
+      progress: 0,
+      currentStep: 'Error'
     })
   }
 }
 
-// Get generation status
-export async function getGenerationStatus(jobId: string): Promise<GenerationStatus | null> {
+function buildSystemPrompt(isModification: boolean, existingFiles: Record<string, string>): string {
+  const fileList = Object.keys(existingFiles).filter(k => k !== '_reasoning').join(', ')
+  
+  const basePrompt = `You are an expert web developer creating beautiful, modern websites.
+
+OUTPUT FORMAT:
+- Return ONLY a valid JSON object
+- Structure: { "filename.html": "content", "other.html": "content" }
+- DO NOT use markdown code blocks
+- DO NOT include explanations outside the JSON
+
+TECHNICAL REQUIREMENTS:
+1. Use HTML5 with embedded CSS and JavaScript
+2. Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+3. Use FontAwesome for icons: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+4. Use Google Fonts (Inter or Roboto)
+5. Make designs PREMIUM, MODERN, and ANIMATED
+6. Include smooth scroll, hover effects, and micro-animations
+7. Ensure responsive design for all screen sizes
+
+DESIGN GUIDELINES:
+- Use a cohesive color scheme
+- Add subtle gradients and shadows
+- Include smooth transitions and hover effects
+- Make the design feel "premium" and "polished"
+- Use proper spacing and typography hierarchy`
+
+  if (isModification) {
+    return `${basePrompt}
+
+MODIFICATION MODE - Current files: ${fileList || 'index.html'}
+
+WHEN USER ASKS TO ADD A NEW PAGE (e.g. "add about page", "create contact page"):
+You MUST return MULTIPLE files in your JSON response:
+{
+  "about.html": "<!DOCTYPE html>...(new page with same header/nav/footer as index.html)...",
+  "index.html": "<!DOCTYPE html>...(UPDATED with navigation link to about.html)..."
+}
+
+WHEN USER ASKS TO EDIT EXISTING CONTENT:
+Return only the modified file:
+{
+  "index.html": "<!DOCTYPE html>...(with requested changes)..."
+}
+
+CRITICAL RULES:
+1. For NEW pages: Create a NEW .html file AND update index.html navigation
+2. New pages MUST have same header/nav/footer style as index.html
+3. Add links in navigation: <a href="about.html">About</a>
+4. Keep Home link: <a href="index.html">Home</a>
+5. PRESERVE all existing content not being changed`
+  }
+
+  return `${basePrompt}
+
+NEW WEBSITE MODE:
+You are creating a brand new website from scratch.
+
+REQUIREMENTS:
+1. Create a complete, production-ready website
+2. Include all necessary sections (hero, features, about, contact, footer, etc.)
+3. Make it visually stunning with modern design
+4. Include placeholder content that makes sense
+5. Add interactive elements (buttons, forms, animations)
+6. Ensure the website is fully functional`
+}
+
+function buildUserMessage(prompt: string, isModification: boolean, existingFiles: Record<string, string>): string {
+  if (!isModification) {
+    return `Create a new website based on this description:
+
+${prompt}
+
+Remember: Return ONLY a JSON object with file contents. No explanations.`
+  }
+
+  // For modifications, include the current code context
+  const currentFilesContext = Object.entries(existingFiles)
+    .filter(([key]) => key !== '_reasoning')
+    .map(([filename, content]) => {
+      // Truncate very long files to avoid token limits
+      const truncatedContent = content.length > 3000 
+        ? content.substring(0, 3000) + '\n<!-- ... content truncated ... -->'
+        : content
+      return `=== ${filename} ===\n${truncatedContent}`
+    })
+    .join('\n\n')
+
+  // Detect if user is asking for a new page
+  const lowerPrompt = prompt.toLowerCase()
+  const isNewPageRequest = lowerPrompt.includes('add') || lowerPrompt.includes('create') || 
+    lowerPrompt.includes('new page') || lowerPrompt.includes('about page') || 
+    lowerPrompt.includes('contact page') || lowerPrompt.includes('pricing page')
+
+  if (isNewPageRequest) {
+    return `CURRENT WEBSITE:
+${currentFilesContext}
+
+USER REQUEST: ${prompt}
+
+IMPORTANT: User is asking for a NEW PAGE. You MUST:
+1. Create a NEW .html file (e.g., "about.html", "contact.html", "pricing.html")
+2. ALSO update index.html to add navigation link to the new page
+3. Use the SAME design style as index.html
+
+Return JSON with MULTIPLE files:
+{
+  "about.html": "<!DOCTYPE html>...(complete new page)...",
+  "index.html": "<!DOCTYPE html>...(with navigation updated)..."
+}`
+  }
+
+  return `CURRENT WEBSITE:
+${currentFilesContext}
+
+USER REQUEST: ${prompt}
+
+Apply the requested changes. Return JSON with the modified file(s).`
+}
+
+function parseAIOutput(rawContent: string, existingFiles: Record<string, string>, isModification: boolean): Record<string, string> {
+  let files: Record<string, string> = {}
+  
+  // Clean up the raw content
+  let jsonString = rawContent
+    .replace(/```json\s*/g, '')
+    .replace(/```\s*/g, '')
+    .trim()
+
+  // Remove any leading/trailing whitespace or newlines before the JSON
+  jsonString = jsonString.replace(/^\s*\n*/, '').replace(/\n*\s*$/, '')
+
+  try {
+    // First attempt: direct parse
+    files = JSON.parse(jsonString)
+  } catch (e) {
+    console.log('Direct parse failed, attempting repairs...')
+    
+    // Attempt repairs
+    try {
+      files = JSON.parse(repairJson(jsonString))
+    } catch (e2) {
+      console.log('Repair parse failed, attempting extraction...')
+      
+      // Try to extract content manually
+      files = extractFilesManually(jsonString)
+      
+      if (Object.keys(files).length === 0) {
+        // Last resort: wrap raw content as HTML
+        console.log('Extraction failed, using raw content...')
+        if (jsonString.includes('<!DOCTYPE') || jsonString.includes('<html')) {
+          files = { 'index.html': jsonString }
+        } else {
+          throw new Error('Could not parse AI output as valid JSON or HTML')
+        }
+      }
+    }
+  }
+
+  // Post-process all files
+  Object.keys(files).forEach(key => {
+    if (typeof files[key] === 'string' && key !== '_reasoning') {
+      // Fix escape sequences
+      files[key] = files[key]
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\>/g, '>')
+        .replace(/\\</g, '<')
+        .replace(/\\\\/g, '\\')
+    }
+  })
+
+  // ALWAYS merge with existing files during modifications
+  // This ensures we don't lose existing pages when AI only returns new/modified ones
+  console.log('[AI-GEN] isModification:', isModification)
+  console.log('[AI-GEN] existingFiles keys:', Object.keys(existingFiles))
+  console.log('[AI-GEN] AI returned files keys:', Object.keys(files))
+  
+  if (isModification) {
+    Object.keys(existingFiles).forEach(key => {
+      if (key !== '_reasoning' && !files[key]) {
+        // Keep existing files that weren't returned by AI
+        console.log('[AI-GEN] Preserving existing file:', key)
+        files[key] = existingFiles[key]
+      }
+    })
+    console.log('[AI-GEN] Final merged files keys:', Object.keys(files))
+  }
+
+  // Remove the _reasoning key if present
+  delete files['_reasoning']
+
+  return files
+}
+
+function repairJson(str: string): string {
+  let repaired = str
+  
+  // Fix common escape sequence issues
+  repaired = repaired.replace(/\\>/g, '>')
+  repaired = repaired.replace(/\\</g, '<')
+  repaired = repaired.replace(/\\'/g, "'")
+  
+  // Remove control characters except newlines, tabs, returns
+  repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+  
+  // Fix truncated JSON
+  if (repaired.startsWith('{') && !repaired.endsWith('}')) {
+    // Find the last complete string
+    const lastQuoteIndex = repaired.lastIndexOf('"')
+    if (lastQuoteIndex > 0) {
+      repaired = repaired.substring(0, lastQuoteIndex + 1) + '}'
+    }
+  }
+  
+  return repaired
+}
+
+function extractFilesManually(str: string): Record<string, string> {
+  const files: Record<string, string> = {}
+  
+  // Try to find file patterns like "filename.html": "content"
+  const filePattern = /"([^"]+\.html?)"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|"$)/g
+  let match
+  
+  while ((match = filePattern.exec(str)) !== null) {
+    const filename = match[1]
+    let content = match[2]
+    
+    // Unescape the content
+    content = content
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\>/g, '>')
+      .replace(/\\</g, '<')
+    
+    files[filename] = content
+  }
+  
+  return files
+}
+
+export async function getGenerationStatus(jobId: string): Promise<GenerationJob | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -335,7 +506,7 @@ export async function getGenerationStatus(jobId: string): Promise<GenerationStat
     .from('generation_jobs')
     .select('*')
     .eq('id', jobId)
-    .eq('user_id', user.id) // Ensure user owns the job
+    .eq('user_id', user.id)
     .single()
 
   if (error || !data) {
@@ -343,31 +514,11 @@ export async function getGenerationStatus(jobId: string): Promise<GenerationStat
   }
 
   return {
+    id: data.id,
     status: data.status,
     progress: data.progress,
     currentStep: data.current_step,
-    files: data.files,
+    files: data.files || {},
     error: data.error
   }
-}
-
-// Helper to update job status
-async function updateJobStatus(jobId: string, updates: Partial<GenerationStatus>) {
-  const supabase = await createClient()
-  
-  // Map camelCase to snake_case for database
-  const dbUpdates: any = {}
-  if (updates.status) dbUpdates.status = updates.status
-  if (updates.progress !== undefined) dbUpdates.progress = updates.progress
-  if (updates.currentStep) dbUpdates.current_step = updates.currentStep
-  if (updates.files) dbUpdates.files = updates.files
-  if (updates.error) dbUpdates.error = updates.error
-  
-  await supabase
-    .from('generation_jobs')
-    .update({
-      ...dbUpdates,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', jobId)
 }
