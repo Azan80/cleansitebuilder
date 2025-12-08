@@ -1,11 +1,15 @@
 import { createClient } from "@/utils/supabase/server";
+import { Checkout } from "@polar-sh/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const productId = searchParams.get("products");
-  const customerEmail = searchParams.get("customerEmail");
+// Create the base checkout handler
+const checkoutHandler = Checkout({
+  accessToken: process.env.POLAR_ACCESS_TOKEN!,
+  successUrl: (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000") + "/builder",
+  server: "sandbox", // Change to "production" when going live
+});
 
+export async function GET(request: NextRequest) {
   // Check if user is logged in
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,32 +22,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (!productId) {
-    return NextResponse.json({ error: "Product ID required" }, { status: 400 });
+  // If user has email but it's not in the query, add it
+  const searchParams = request.nextUrl.searchParams;
+  if (user.email && !searchParams.has("customerEmail")) {
+    // Clone the URL and add the email
+    const newUrl = new URL(request.url);
+    newUrl.searchParams.set("customerEmail", user.email);
+    
+    // Create a new request with the updated URL
+    const newRequest = new NextRequest(newUrl, request);
+    return checkoutHandler(newRequest);
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cleansitebuilder.com";
-  const successUrl = `${baseUrl}/builder`;
-  
-  // Use sandbox for testing, production when live
-  const polarServer = process.env.POLAR_SERVER === "production" 
-    ? "https://buy.polar.sh" 
-    : "https://sandbox.polar.sh";
-  
-  // Build Polar buy link URL
-  const checkoutUrl = new URL(`${polarServer}/polar_cl_${productId}`);
-  
-  // Add success URL
-  checkoutUrl.searchParams.set("successUrl", successUrl);
-  
-  // Auto-fill user email
-  const email = customerEmail || user.email;
-  if (email) {
-    checkoutUrl.searchParams.set("customerEmail", email);
-  }
-  
-  // Add theme
-  checkoutUrl.searchParams.set("theme", "dark");
-
-  return NextResponse.redirect(checkoutUrl.toString());
+  // Use the checkout handler from @polar-sh/nextjs
+  return checkoutHandler(request);
 }
