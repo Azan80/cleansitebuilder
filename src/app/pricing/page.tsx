@@ -2,9 +2,11 @@
 
 import { Footer } from '@/landingpage/Footer'
 import { Navbar } from '@/landingpage/Navbar'
+import { createClient } from '@/utils/supabase/client'
 import { motion } from 'framer-motion'
 import { ArrowRight, Check, Crown, Sparkles, Zap } from 'lucide-react'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
 const plans = [
     {
@@ -56,6 +58,26 @@ const plans = [
 ]
 
 export default function PricingPage() {
+    const [userEmail, setUserEmail] = useState<string | null>(null)
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            const supabase = createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user?.email) {
+                setUserEmail(user.email)
+            }
+        }
+        fetchUser()
+    }, [])
+
+    const getCheckoutUrl = (productId: string) => {
+        let url = `/api/checkout?products=${productId}`
+        if (userEmail) {
+            url += `&customerEmail=${encodeURIComponent(userEmail)}`
+        }
+        return url
+    }
 
     return (
         <div className="min-h-screen bg-[#030014] text-white overflow-hidden">
@@ -147,7 +169,7 @@ export default function PricingPage() {
 
                                         {/* CTA Button */}
                                         <Link
-                                            href={`/api/checkout?products=${plan.productId}`}
+                                            href={getCheckoutUrl(plan.productId)}
                                             className={`w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-medium transition-all mb-8 ${plan.popular
                                                 ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 text-white shadow-lg shadow-purple-500/30'
                                                 : 'bg-white/10 hover:bg-white/20 text-white'

@@ -11,6 +11,7 @@
   "dependencies": {
     "@codesandbox/sandpack-react": "^2.20.0",
     "@polar-sh/nextjs": "^0.9.0",
+    "@polar-sh/sdk": "^0.41.5",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.84.0",
     "@types/file-saver": "^2.0.7",
