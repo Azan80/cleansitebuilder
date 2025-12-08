@@ -51,7 +51,12 @@ export default function ProjectEditorPage() {
     const [domainStatus, setDomainStatus] = useState<'none' | 'verifying' | 'active' | 'error'>('none')
     const [reasoning, setReasoning] = useState('')
     const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string }>>([])
+    const [agentTasks, setAgentTasks] = useState<Array<{ id: string, name: string, type: string, status: string, fileName?: string }>>([])
+    const [currentTaskIndex, setCurrentTaskIndex] = useState(0)
+    const [totalTasks, setTotalTasks] = useState(0)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const [activeJobId, setActiveJobId] = useState<string | null>(null)
+
     useEffect(() => {
         const fetchProject = async () => {
             if (params.id) {
@@ -73,6 +78,19 @@ export default function ProjectEditorPage() {
                     } else {
                         setMessages([{ role: 'ai', content: 'Hello! I\'m your AI web builder. Describe the website you want to create, and I\'ll build it for you instantly.' }])
                     }
+
+                    // Check for active (running) jobs
+                    const { getActiveJobForProject } = await import('@/app/actions/ai-generation')
+                    const activeJob = await getActiveJobForProject(params.id as string)
+                    if (activeJob && (activeJob.status === 'pending' || activeJob.status === 'processing')) {
+                        console.log('[RESUME] Found active job:', activeJob.id, activeJob.status)
+                        setActiveJobId(activeJob.id)
+                        setIsGenerating(true)
+                        setAgentTasks(activeJob.tasks || [])
+                        setCurrentTaskIndex(activeJob.currentTaskIndex || 0)
+                        setTotalTasks(activeJob.totalTasks || 0)
+                        setMessages(prev => [...prev, { role: 'ai', content: `${activeJob.currentStep} (${activeJob.progress}%)` }])
+                    }
                 } else {
                     router.push('/builder')
                 }
@@ -81,6 +99,82 @@ export default function ProjectEditorPage() {
         }
         fetchProject()
     }, [params.id, router])
+
+    // Resume polling for active job if page was refreshed
+    useEffect(() => {
+        if (!activeJobId || !isGenerating) return
+
+        let cancelled = false
+
+        const pollActiveJob = async () => {
+            const { getGenerationStatus } = await import('@/app/actions/ai-generation')
+
+            while (!cancelled && isGenerating) {
+                await new Promise(resolve => setTimeout(resolve, 1000))
+
+                const status = await getGenerationStatus(activeJobId)
+                if (!status) continue
+
+                // Update agent tasks if available
+                if (status.tasks && status.tasks.length > 0) {
+                    setAgentTasks(status.tasks)
+                    setCurrentTaskIndex(status.currentTaskIndex || 0)
+                    setTotalTasks(status.totalTasks || status.tasks.length)
+                }
+
+                // Update progress message
+                const taskInfo = status.totalTasks ? ` (Task ${(status.currentTaskIndex || 0) + 1}/${status.totalTasks})` : ''
+                const progressMsg = `${status.currentStep || 'Working...'}${taskInfo}`
+                setMessages(prev => {
+                    const newMsgs = [...prev]
+                    if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === 'ai') {
+                        newMsgs[newMsgs.length - 1].content = progressMsg
+                    }
+                    return newMsgs
+                })
+
+                if (status.files && status.files['_reasoning']) {
+                    setReasoning(status.files['_reasoning'])
+                }
+
+                if (status.status === 'completed') {
+                    const cleanFiles = { ...status.files }
+                    delete cleanFiles['_reasoning']
+
+                    setProject((prev: any) => ({
+                        ...prev,
+                        code_content: JSON.stringify(cleanFiles)
+                    }))
+                    setVersion(v => v + 1)
+
+                    const fileNames = Object.keys(cleanFiles)
+                    setMessages(prev => [...prev.slice(0, -1), {
+                        role: 'ai',
+                        content: `✅ Done! Generated ${fileNames.length} file(s): ${fileNames.join(', ')}`
+                    }])
+                    setReasoning('')
+                    setAgentTasks([])
+                    setIsGenerating(false)
+                    setActiveJobId(null)
+                    break
+                } else if (status.status === 'error') {
+                    setMessages(prev => [...prev.slice(0, -1), {
+                        role: 'ai',
+                        content: `❌ Error: ${status.error || 'Unknown error'}`
+                    }])
+                    setReasoning('')
+                    setAgentTasks([])
+                    setIsGenerating(false)
+                    setActiveJobId(null)
+                    break
+                }
+            }
+        }
+
+        pollActiveJob()
+
+        return () => { cancelled = true }
+    }, [activeJobId, isGenerating])
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -148,9 +242,17 @@ export default function ProjectEditorPage() {
                 }
                 consecutiveErrors = 0 // Reset on successful fetch
 
+                // Update agent tasks if available
+                if (status.tasks && status.tasks.length > 0) {
+                    setAgentTasks(status.tasks)
+                    setCurrentTaskIndex(status.currentTaskIndex || 0)
+                    setTotalTasks(status.totalTasks || status.tasks.length)
+                }
+
                 // Update progress message
                 if (status.progress > lastProgress || status.currentStep) {
-                    const progressMsg = `${status.currentStep || 'Working...'} (${status.progress}%)`
+                    const taskInfo = status.totalTasks ? ` (Task ${(status.currentTaskIndex || 0) + 1}/${status.totalTasks})` : ''
+                    const progressMsg = `${status.currentStep || 'Working...'}${taskInfo}`
                     setMessages(prev => {
                         const newMsgs = [...prev]
                         if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === 'ai') {
@@ -179,12 +281,15 @@ export default function ProjectEditorPage() {
                         }))
                         setVersion(v => v + 1)
 
-                        const fileCount = Object.keys(cleanFiles).length
+                        const fileNames = Object.keys(cleanFiles)
+                        const fileCount = fileNames.length
+                        const fileList = fileNames.join(', ')
                         setMessages(prev => [...prev.slice(0, -1), {
                             role: 'ai',
-                            content: `✅ Done! Generated ${fileCount} file${fileCount > 1 ? 's' : ''}. Check out the preview!`
+                            content: `✅ Done! Generated ${fileCount} file${fileCount > 1 ? 's' : ''}: ${fileList}`
                         }])
                         setReasoning('')
+                        setAgentTasks([]) // Clear tasks on completion
                     } else {
                         setMessages(prev => [...prev.slice(0, -1), { role: 'ai', content: '⚠️ Generation completed but no files were created. Please try with a different prompt.' }])
                     }
@@ -192,11 +297,13 @@ export default function ProjectEditorPage() {
                     completed = true
                     setMessages(prev => [...prev.slice(0, -1), { role: 'ai', content: `❌ Error: ${status.error || 'Unknown error'}. Try a simpler request or be more specific.` }])
                     setReasoning('')
+                    setAgentTasks([]) // Clear tasks on error
                 }
             }
         } catch (error: any) {
             console.error('Handle Message Error:', error)
             setMessages(prev => [...prev, { role: 'ai', content: `❌ An error occurred: ${error.message || 'Please try again.'}` }])
+            setAgentTasks([])
         } finally {
             setIsGenerating(false)
         }
@@ -448,6 +555,77 @@ export default function ProjectEditorPage() {
                                         </div>
                                     </motion.div>
                                 )}
+
+                                {/* Agent Task List */}
+                                {agentTasks.length > 0 && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden"
+                                    >
+                                        <div className="flex items-center justify-between gap-2 p-3 border-b border-gray-200 dark:border-white/10 bg-gray-100/50 dark:bg-white/5">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                                                    <span className="text-[8px] text-white font-bold">{currentTaskIndex + 1}</span>
+                                                </div>
+                                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                                                    Task Progress {currentTaskIndex + 1}/{totalTasks}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-indigo-500 font-medium">
+                                                {Math.round((currentTaskIndex / totalTasks) * 100)}%
+                                            </div>
+                                        </div>
+                                        <div className="p-2 max-h-48 overflow-y-auto space-y-1">
+                                            {agentTasks.map((task, idx) => (
+                                                <div
+                                                    key={task.id}
+                                                    className={`flex items-center gap-2 p-2 rounded-lg text-xs transition-all ${task.status === 'in_progress'
+                                                        ? 'bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20'
+                                                        : task.status === 'completed'
+                                                            ? 'bg-green-50/50 dark:bg-green-500/5'
+                                                            : 'opacity-50'
+                                                        }`}
+                                                >
+                                                    {/* Status Icon */}
+                                                    {task.status === 'completed' ? (
+                                                        <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                                                            <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </div>
+                                                    ) : task.status === 'in_progress' ? (
+                                                        <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin shrink-0" />
+                                                    ) : task.status === 'error' ? (
+                                                        <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+                                                            <span className="text-white text-[8px]">✕</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-4 h-4 rounded-full border-2 border-gray-300 dark:border-gray-600 shrink-0" />
+                                                    )}
+
+                                                    {/* Task Name */}
+                                                    <span className={`flex-1 truncate ${task.status === 'in_progress'
+                                                        ? 'text-indigo-600 dark:text-indigo-400 font-medium'
+                                                        : task.status === 'completed'
+                                                            ? 'text-green-600 dark:text-green-400'
+                                                            : 'text-gray-500'
+                                                        }`}>
+                                                        {task.name}
+                                                    </span>
+
+                                                    {/* File badge */}
+                                                    {task.fileName && task.status === 'completed' && (
+                                                        <span className="text-[10px] bg-gray-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-gray-500">
+                                                            {task.fileName}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                )}
+
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
                                     <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
                                         <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />

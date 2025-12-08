@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 export const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -22,14 +22,13 @@ export const Navbar = () => {
     <>
       <nav className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
         <div className="pointer-events-auto w-full max-w-5xl">
-          <div 
-            className={`transition-all duration-500 ease-in-out rounded-full border px-6 py-3 flex items-center justify-between ${
-              isScrolled 
-                ? "bg-[#0a0a0a]/80 backdrop-blur-xl border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]" 
+          <div
+            className={`transition-all duration-500 ease-in-out rounded-full border px-6 py-3 flex items-center justify-between ${isScrolled
+                ? "bg-[#0a0a0a]/80 backdrop-blur-xl border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]"
                 : "bg-transparent border-transparent"
-            }`}
+              }`}
           >
-            
+
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group">
               <Image src="/icon/project-initiation (1).png" alt="Logo" width={40} height={40} className="w-10 h-10 group-hover:rotate-12 transition-transform" />
@@ -40,7 +39,7 @@ export const Navbar = () => {
 
             {/* Desktop Menu */}
             <div className={`hidden md:flex items-center gap-1 transition-all duration-500 ${!isScrolled && "bg-[#111]/50 border border-white/5 rounded-full p-1 backdrop-blur-md"}`}>
-              {["Features", "Showcase", "Pricing"].map((item) => (
+              {["Features", "Showcase"].map((item) => (
                 <Link
                   key={item}
                   href={`#${item.toLowerCase()}`}
@@ -49,6 +48,12 @@ export const Navbar = () => {
                   {item}
                 </Link>
               ))}
+              <Link
+                href="/pricing"
+                className="px-5 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+              >
+                Pricing
+              </Link>
             </div>
 
             {/* CTA */}
@@ -85,7 +90,7 @@ export const Navbar = () => {
             className="fixed top-24 left-4 right-4 bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-3xl z-40 md:hidden overflow-hidden shadow-2xl p-4"
           >
             <div className="flex flex-col gap-2">
-              {["Features", "Showcase", "Pricing"].map((item) => (
+              {["Features", "Showcase"].map((item) => (
                 <Link
                   key={item}
                   href={`#${item.toLowerCase()}`}
@@ -95,6 +100,13 @@ export const Navbar = () => {
                   {item}
                 </Link>
               ))}
+              <Link
+                href="/pricing"
+                className="text-lg font-medium text-gray-300 py-4 px-6 hover:bg-white/5 rounded-2xl transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Pricing
+              </Link>
               <div className="h-px bg-white/10 my-2" />
               <Link
                 href="/login"
