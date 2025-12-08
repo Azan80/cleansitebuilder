@@ -8,6 +8,15 @@ const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com'
 })
 
+// Task structure for multi-step generation
+export type GenerationTask = {
+  id: string;
+  name: string;
+  type: 'plan' | 'design' | 'page' | 'finalize';
+  status: 'pending' | 'in_progress' | 'completed' | 'error';
+  fileName?: string;
+}
+
 export type GenerationJob = {
   id: string;
   status: 'pending' | 'processing' | 'completed' | 'error';
@@ -15,6 +24,10 @@ export type GenerationJob = {
   progress: number;
   files: Record<string, string>;
   error?: string;
+  tasks?: GenerationTask[];
+  currentTaskIndex?: number;
+  totalTasks?: number;
+  designSpec?: string;
 };
 
 export async function startWebsiteGeneration(
@@ -47,9 +60,12 @@ export async function startWebsiteGeneration(
       project_id: projectId,
       user_id: user.id,
       status: 'pending',
-      current_step: 'Starting...',
+      current_step: 'Analyzing your request...',
       progress: 0,
-      files: {}
+      files: {},
+      tasks: [],
+      current_task_index: 0,
+      total_tasks: 0
     })
 
   if (error) {
@@ -73,13 +89,16 @@ async function generateInBackground(
 ) {
   const supabase = await createClient()
 
-  const updateStatus = async (status: Partial<GenerationJob>) => {
+  const updateStatus = async (status: Partial<GenerationJob> & { tasks?: GenerationTask[], currentTaskIndex?: number, totalTasks?: number }) => {
     const dbUpdates: any = { updated_at: new Date().toISOString() }
     if (status.status) dbUpdates.status = status.status
     if (status.currentStep) dbUpdates.current_step = status.currentStep
     if (status.progress !== undefined) dbUpdates.progress = status.progress
     if (status.files) dbUpdates.files = status.files
     if (status.error) dbUpdates.error = status.error
+    if (status.tasks) dbUpdates.tasks = status.tasks
+    if (status.currentTaskIndex !== undefined) dbUpdates.current_task_index = status.currentTaskIndex
+    if (status.totalTasks !== undefined) dbUpdates.total_tasks = status.totalTasks
     
     await supabase
       .from('generation_jobs')
@@ -88,152 +107,46 @@ async function generateInBackground(
   }
 
   try {
-    // Determine if this is a new project or modification
+    // Parse existing files
     let existingFiles: Record<string, string> = {}
     let isModification = false
-    
-    console.log('[AI-GEN] currentCode exists:', !!currentCode)
-    console.log('[AI-GEN] currentCode length:', currentCode?.length || 0)
     
     if (currentCode) {
       try {
         existingFiles = JSON.parse(currentCode)
-        console.log('[AI-GEN] Parsed existing files:', Object.keys(existingFiles))
-        // Check if we have actual content (not just the default placeholder)
         const hasRealContent = Object.keys(existingFiles).some(key => 
           key !== '_reasoning' && existingFiles[key] && existingFiles[key].length > 100
         )
         isModification = hasRealContent
-        console.log('[AI-GEN] hasRealContent:', hasRealContent, 'isModification:', isModification)
       } catch (e) {
-        // If parsing fails, treat as new project
-        console.log('[AI-GEN] Failed to parse currentCode:', e)
         existingFiles = {}
       }
     }
 
-    // Choose model based on task complexity
-    const model = isModification ? "deepseek-chat" : "deepseek-reasoner"
-
-    await updateStatus({
-      status: 'processing',
-      progress: 10,
-      currentStep: isModification ? 'Analyzing your changes...' : 'Understanding your requirements...'
-    })
-
-    // Build a comprehensive system prompt
-    const systemPrompt = buildSystemPrompt(isModification, existingFiles)
-
-    // Build the user message with proper context
-    const userMessage = buildUserMessage(prompt, isModification, existingFiles)
-
-    // Build API messages - only include relevant history
-    const relevantHistory = history.slice(-6) // Last 3 exchanges
-    const apiMessages = [
-      { role: "system", content: systemPrompt },
-      ...relevantHistory
-        .filter(msg => msg.content && !msg.content.startsWith('Starting generation') && !msg.content.includes('%'))
-        .map(msg => ({ 
-          role: msg.role === 'ai' ? 'assistant' : 'user', 
-          content: msg.content 
-        })),
-      { role: "user", content: userMessage }
-    ]
-
-    await updateStatus({
-      progress: 20,
-      currentStep: isModification ? 'Applying your changes...' : 'Designing your website...'
-    })
-
-    const stream = await openai.chat.completions.create({
-      model: model,
-      messages: apiMessages as any,
-      stream: true,
-      max_tokens: 8192,
-      temperature: 0.7,
-      response_format: { type: "json_object" },
-      ...(model === 'deepseek-reasoner' ? { extra_body: { thinking: { type: "enabled" } } } : {})
-    } as any) as unknown as AsyncIterable<any>
-
-    let fullContent = ''
-    let fullReasoning = ''
-    let lastUpdate = Date.now()
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta as any
-      
-      if (delta?.reasoning_content) {
-        fullReasoning += delta.reasoning_content
-        
-        if (Date.now() - lastUpdate > 500) {
-          await updateStatus({ 
-            files: { '_reasoning': fullReasoning } as any,
-            currentStep: 'Thinking through the design...',
-            progress: 25
-          })
-          lastUpdate = Date.now()
-        }
-      } else if (delta?.content) {
-        fullContent += delta.content
-        
-        if (Date.now() - lastUpdate > 500) {
-          const progress = 40 + Math.min(50, Math.floor(fullContent.length / 200))
-          await updateStatus({
-            currentStep: 'Writing code...',
-            progress: progress
-          })
-          lastUpdate = Date.now()
-        }
+    // Check for quick edit (simple text replacement) - FAST PATH
+    if (isModification) {
+      const quickEdit = detectQuickEdit(prompt)
+      if (quickEdit) {
+        console.log('[QUICK-EDIT] Detected quick edit:', quickEdit)
+        await performQuickEdit(jobId, quickEdit, existingFiles, userId, projectId, updateStatus, supabase)
+        return
       }
     }
 
-    await updateStatus({ 
-      progress: 92, 
-      currentStep: 'Processing output...',
-      files: { '_reasoning': fullReasoning } as any
-    })
-
-    // Parse and validate the JSON output
-    const files = parseAIOutput(fullContent, existingFiles, isModification)
-
-    // Validate that we have meaningful content
-    if (!files || Object.keys(files).filter(k => k !== '_reasoning').length === 0) {
-      throw new Error('AI did not generate any files')
+    // Detect if this is a multi-page request
+    const isMultiPageRequest = detectMultiPageRequest(prompt)
+    
+    if (isMultiPageRequest && !isModification) {
+      // Use multi-step agent workflow for complex new projects
+      await generateWithAgentWorkflow(jobId, prompt, existingFiles, userId, projectId, updateStatus, supabase)
+    } else {
+      // Use simple single-step generation for modifications or simple requests
+      await generateSimple(jobId, prompt, existingFiles, isModification, userId, projectId, updateStatus, supabase, history)
     }
-
-    // Check for valid HTML in index.html
-    if (files['index.html'] && !files['index.html'].includes('<!DOCTYPE') && !files['index.html'].includes('<html')) {
-      throw new Error('Generated HTML appears to be incomplete')
-    }
-
-    // Save to project
-    await supabase
-      .from('projects')
-      .update({ 
-        code_content: JSON.stringify(files),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', projectId)
-      .eq('user_id', userId)
-
-    // Save AI success message to DB
-    await supabase.from('messages').insert({
-      project_id: projectId,
-      role: 'ai',
-      content: 'Website updated successfully!'
-    })
-
-    await updateStatus({
-      status: 'completed',
-      progress: 100,
-      currentStep: 'Done!',
-      files: files as any
-    })
 
   } catch (error: any) {
     console.error('Generation Error:', error)
     
-    // Save error message to chat
     await supabase.from('messages').insert({
       project_id: projectId,
       role: 'ai',
@@ -247,6 +160,606 @@ async function generateInBackground(
       currentStep: 'Error'
     })
   }
+}
+
+// Detect quick edits (simple text replacements that don't need AI)
+type QuickEdit = { type: 'replace', oldText: string, newText: string } | null
+
+function detectQuickEdit(prompt: string): QuickEdit {
+  // Patterns for simple text replacement - ordered from most specific to least
+  const patterns = [
+    // "change website name from ELEVATE to AliCollections" -> captures ELEVATE, AliCollections
+    /(?:change|rename|replace)\s+(?:the\s+)?(?:website\s+)?(?:site\s+)?(?:name\s+)?from\s+["']?(\S+)["']?\s+to\s+["']?(\S+)["']?/i,
+    
+    // "change 'ELEVATE' to 'AliCollections'" -> with quotes
+    /(?:change|rename|replace)\s+["']([^"']+)["']\s+(?:to|with)\s+["']([^"']+)["']/i,
+    
+    // "replace ELEVATE with AliCollections" -> simple replace X with Y
+    /replace\s+["']?(\S+)["']?\s+with\s+["']?(\S+)["']?/i,
+    
+    // "ELEVATE to AliCollections" -> very simple X to Y
+    /^["']?(\S+)["']?\s+to\s+["']?(\S+)["']?$/i,
+    
+    // "rename ELEVATE to AliCollections" -> rename X to Y
+    /rename\s+["']?(\S+)["']?\s+to\s+["']?(\S+)["']?/i,
+  ]
+  
+  for (const pattern of patterns) {
+    const match = prompt.match(pattern)
+    if (match && match[1] && match[2]) {
+      const oldText = match[1].trim().replace(/["']/g, '')
+      const newText = match[2].trim().replace(/["']/g, '')
+      
+      // Only use quick edit for short text (likely names, not full paragraphs)
+      // And ensure we actually found something meaningful
+      if (oldText.length > 0 && oldText.length < 50 && newText.length > 0 && newText.length < 50) {
+        console.log(`[QUICK-EDIT] Pattern matched: "${oldText}" -> "${newText}"`)
+        return { type: 'replace', oldText, newText }
+      }
+    }
+  }
+  
+  return null
+}
+
+// Perform quick edit - instant find/replace without AI
+async function performQuickEdit(
+  jobId: string,
+  quickEdit: QuickEdit,
+  existingFiles: Record<string, string>,
+  userId: string,
+  projectId: string,
+  updateStatus: Function,
+  supabase: any
+) {
+  if (!quickEdit || quickEdit.type !== 'replace') return
+
+  await updateStatus({
+    status: 'processing',
+    progress: 30,
+    currentStep: `🔄 Replacing "${quickEdit.oldText}" with "${quickEdit.newText}"...`
+  })
+
+  const { oldText, newText } = quickEdit
+  const updatedFiles: Record<string, string> = {}
+  let replacementCount = 0
+  let filesUpdated = 0
+
+  // Perform case-insensitive replacement across all files
+  for (const [filename, content] of Object.entries(existingFiles)) {
+    if (filename === '_reasoning') continue
+    
+    // Create a regex for case-insensitive replacement but preserve case
+    const regex = new RegExp(oldText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    const matches = content.match(regex)
+    
+    if (matches && matches.length > 0) {
+      // Replace all occurrences
+      updatedFiles[filename] = content.replace(regex, newText)
+      replacementCount += matches.length
+      filesUpdated++
+    } else {
+      updatedFiles[filename] = content
+    }
+  }
+
+  await updateStatus({
+    progress: 70,
+    currentStep: `✅ Replaced ${replacementCount} occurrences in ${filesUpdated} files`
+  })
+
+  // Save to database
+  await supabase
+    .from('projects')
+    .update({ 
+      code_content: JSON.stringify(updatedFiles),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', projectId)
+    .eq('user_id', userId)
+
+  // Save success message
+  await supabase.from('messages').insert({
+    project_id: projectId,
+    role: 'ai',
+    content: `✅ Quick edit complete! Replaced "${oldText}" with "${newText}" in ${filesUpdated} file(s) (${replacementCount} occurrences).`
+  })
+
+  await updateStatus({
+    status: 'completed',
+    files: updatedFiles,
+    progress: 100,
+    currentStep: '✅ Done!'
+  })
+
+  console.log(`[QUICK-EDIT] Completed: ${replacementCount} replacements in ${filesUpdated} files`)
+}
+
+// Detect if prompt is asking for multiple pages
+function detectMultiPageRequest(prompt: string): boolean {
+  const lowerPrompt = prompt.toLowerCase()
+  const multiPageIndicators = [
+    'multi-page', 'multiple pages', 'several pages',
+    'pages:', 'include pages', 
+    'home, ', 'home page,',
+    'about, contact', 'pricing, ',
+    'blog, ', 'docs, ', 'documentation',
+    '5 pages', '10 pages', 'many pages',
+    'complete website', 'full website',
+    'technology, innovations', 'partners, '
+  ]
+  return multiPageIndicators.some(indicator => lowerPrompt.includes(indicator))
+}
+
+// Extract page names from prompt - uses AI to determine pages
+async function extractPageNamesWithAI(prompt: string): Promise<string[]> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a website planning assistant. Based on the user's website description, determine what pages should be created.
+
+Return ONLY a JSON array of page names, like: ["home", "about", "contact", "pricing"]
+
+Rules:
+- Always include "home" as the first page
+- Analyze what the website is about and suggest appropriate pages
+- For tech/SaaS: consider technology, features, pricing, docs, blog
+- For agencies: consider services, portfolio, team, contact
+- For e-commerce: consider products, categories, cart, checkout
+- For portfolios: consider work, projects, resume, contact
+- Maximum 8-10 pages for complex requests
+- Use lowercase, single-word page names (use hyphens for multi-word)
+
+Return ONLY the JSON array, nothing else.`
+        },
+        { role: 'user', content: prompt }
+      ],
+      max_tokens: 200,
+      temperature: 0.5
+    })
+
+    const content = response.choices[0]?.message?.content || ''
+    
+    // Try to parse JSON array
+    const match = content.match(/\[[\s\S]*\]/)
+    if (match) {
+      const pages = JSON.parse(match[0]) as string[]
+      if (Array.isArray(pages) && pages.length > 0) {
+        // Ensure 'home' is first
+        const normalized = pages.map(p => p.toLowerCase().replace(/\s+/g, '-'))
+        if (!normalized.includes('home')) {
+          normalized.unshift('home')
+        } else {
+          // Move 'home' to front if it exists
+          const homeIndex = normalized.indexOf('home')
+          if (homeIndex > 0) {
+            normalized.splice(homeIndex, 1)
+            normalized.unshift('home')
+          }
+        }
+        return normalized.slice(0, 10) // Max 10 pages
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting pages with AI:', error)
+  }
+  
+  // Fallback to keyword matching
+  return extractPageNamesFallback(prompt)
+}
+
+// Fallback: Extract page names using keyword matching
+function extractPageNamesFallback(prompt: string): string[] {
+  const lowerPrompt = prompt.toLowerCase()
+  
+  // Try pattern matching first
+  const patterns = [
+    /pages?:\s*([^.]+)/i,
+    /include\s+pages?:\s*([^.]+)/i,
+    /with\s+(?:pages?|sections?)(?:\s+like)?:\s*([^.]+)/i,
+  ]
+  
+  for (const pattern of patterns) {
+    const match = prompt.match(pattern)
+    if (match) {
+      const pages = match[1].split(/[,\s]+and\s+|,\s*/).map(p => p.trim()).filter(p => p.length > 0)
+      if (pages.length > 1) {
+        return pages.map(p => p.replace(/\s+/g, '-').toLowerCase())
+      }
+    }
+  }
+  
+  // Keyword-based detection
+  const defaultPages = ['home']
+  if (lowerPrompt.includes('about')) defaultPages.push('about')
+  if (lowerPrompt.includes('contact')) defaultPages.push('contact')
+  if (lowerPrompt.includes('pricing')) defaultPages.push('pricing')
+  if (lowerPrompt.includes('blog')) defaultPages.push('blog')
+  if (lowerPrompt.includes('technology')) defaultPages.push('technology')
+  if (lowerPrompt.includes('feature')) defaultPages.push('features')
+  if (lowerPrompt.includes('team')) defaultPages.push('team')
+  if (lowerPrompt.includes('service')) defaultPages.push('services')
+  if (lowerPrompt.includes('portfolio')) defaultPages.push('portfolio')
+  if (lowerPrompt.includes('doc')) defaultPages.push('docs')
+  
+  return defaultPages.length > 1 ? defaultPages : ['home']
+}
+
+// Multi-step agent workflow for complex projects
+async function generateWithAgentWorkflow(
+  jobId: string,
+  prompt: string,
+  existingFiles: Record<string, string>,
+  userId: string,
+  projectId: string,
+  updateStatus: Function,
+  supabase: any
+) {
+  // Step 1: Analyze and plan - Use AI to determine pages
+  await updateStatus({
+    status: 'processing',
+    progress: 5,
+    currentStep: '🔍 Analyzing your request...'
+  })
+
+  const pageNames = await extractPageNamesWithAI(prompt)
+  
+  // Create task list
+  const tasks: GenerationTask[] = [
+    { id: 'plan', name: 'Create project plan', type: 'plan', status: 'pending' },
+    { id: 'design', name: 'Define design system', type: 'design', status: 'pending' },
+    ...pageNames.map((page: string, i: number) => ({
+      id: `page-${i}`,
+      name: `Create ${page === 'home' ? 'index.html' : page + '.html'}`,
+      type: 'page' as const,
+      status: 'pending' as const,
+      fileName: page === 'home' ? 'index.html' : `${page}.html`
+    })),
+    { id: 'finalize', name: 'Finalize & optimize', type: 'finalize', status: 'pending' }
+  ]
+
+  await updateStatus({
+    tasks,
+    totalTasks: tasks.length,
+    currentTaskIndex: 0,
+    progress: 10,
+    currentStep: `📋 Planning ${tasks.length} tasks...`
+  })
+
+  // Step 2: Generate design specification
+  tasks[0].status = 'in_progress'
+  await updateStatus({ tasks, currentTaskIndex: 0, currentStep: '📋 Creating project plan...' })
+  
+  const designSpec = await generateDesignSpec(prompt)
+  
+  tasks[0].status = 'completed'
+  tasks[1].status = 'in_progress'
+  await updateStatus({ 
+    tasks, 
+    currentTaskIndex: 1, 
+    progress: 15,
+    currentStep: '🎨 Defining design system...'
+  })
+
+  // Short delay to show progress
+  await new Promise(r => setTimeout(r, 500))
+  tasks[1].status = 'completed'
+  
+  // Step 3: Generate pages one by one
+  const generatedFiles: Record<string, string> = {}
+  const pageCount = pageNames.length
+  
+  for (let i = 0; i < pageNames.length; i++) {
+    const pageName = pageNames[i]
+    const fileName = pageName === 'home' ? 'index.html' : `${pageName}.html`
+    const taskIndex = i + 2 // Offset for plan and design tasks
+    
+    tasks[taskIndex].status = 'in_progress'
+    const progressPercent = 20 + Math.floor((i / pageCount) * 60)
+    
+    await updateStatus({
+      tasks,
+      currentTaskIndex: taskIndex,
+      progress: progressPercent,
+      currentStep: `📄 Creating ${fileName} (${i + 1}/${pageCount})...`
+    })
+
+    try {
+      const pageHtml = await generateSinglePage(
+        prompt, 
+        designSpec, 
+        pageName, 
+        fileName,
+        pageNames,
+        generatedFiles['index.html'] // Pass index.html for style reference
+      )
+      
+      generatedFiles[fileName] = pageHtml
+      tasks[taskIndex].status = 'completed'
+      
+      // Update files progressively
+      await updateStatus({
+        tasks,
+        files: { ...generatedFiles, '_reasoning': designSpec },
+        progress: progressPercent + 10
+      })
+      
+    } catch (error: any) {
+      console.error(`Error generating ${fileName}:`, error)
+      tasks[taskIndex].status = 'error'
+      // Continue with other pages
+    }
+  }
+
+  // Step 4: Finalize
+  const finalTaskIndex = tasks.length - 1
+  tasks[finalTaskIndex].status = 'in_progress'
+  await updateStatus({
+    tasks,
+    currentTaskIndex: finalTaskIndex,
+    progress: 90,
+    currentStep: '✨ Finalizing website...'
+  })
+
+  // Post-process all files
+  Object.keys(generatedFiles).forEach(key => {
+    if (typeof generatedFiles[key] === 'string') {
+      generatedFiles[key] = postProcessHtml(generatedFiles[key])
+    }
+  })
+
+  tasks[finalTaskIndex].status = 'completed'
+
+  // Save to project
+  await supabase
+    .from('projects')
+    .update({ 
+      code_content: JSON.stringify(generatedFiles),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', projectId)
+    .eq('user_id', userId)
+
+  // Save success message
+  await supabase.from('messages').insert({
+    project_id: projectId,
+    role: 'ai',
+    content: `✅ Created ${Object.keys(generatedFiles).length} pages: ${Object.keys(generatedFiles).join(', ')}`
+  })
+
+  await updateStatus({
+    status: 'completed',
+    tasks,
+    files: generatedFiles,
+    progress: 100,
+    currentStep: '✅ Done!'
+  })
+}
+
+// Generate design specification
+async function generateDesignSpec(prompt: string): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: 'deepseek-chat',
+    messages: [
+      {
+        role: 'system',
+        content: `You are a UI/UX designer. Create a brief design specification (max 200 words) for the following website request. Include: color palette, typography, layout style, and key visual elements. Be concise.`
+      },
+      { role: 'user', content: prompt }
+    ],
+    max_tokens: 500,
+    temperature: 0.7
+  })
+
+  return response.choices[0]?.message?.content || 'Modern, clean design with professional aesthetics'
+}
+
+// Generate a single page with consistent styling
+async function generateSinglePage(
+  originalPrompt: string,
+  designSpec: string,
+  pageName: string,
+  fileName: string,
+  allPages: string[],
+  indexHtmlReference?: string
+): Promise<string> {
+  const navLinks = allPages.map(p => {
+    const file = p === 'home' ? 'index.html' : `${p}.html`
+    const label = p.charAt(0).toUpperCase() + p.slice(1).replace(/-/g, ' ')
+    return `<a href="${file}">${label}</a>`
+  }).join(' | ')
+
+  const systemPrompt = `You are an expert web developer. Generate ONLY the HTML code for ${fileName}.
+  
+DESIGN SPECIFICATION:
+${designSpec}
+
+CRITICAL REQUIREMENTS:
+1. Return ONLY raw HTML code - no markdown, no explanations, no code blocks
+2. Start with <!DOCTYPE html>
+3. Include these CDNs in <head>:
+   <script src="https://cdn.tailwindcss.com"></script>
+   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+4. Include before </body>:
+   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+   <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+   <script>AOS.init({duration:800,once:true});</script>
+
+5. Navigation must include links to: ${navLinks}
+6. ${indexHtmlReference ? 'Match the header/footer style from the reference below' : 'Create a consistent header and footer'}
+7. Use data-aos="fade-up" for scroll animations
+8. Make it visually stunning with modern design
+
+${indexHtmlReference ? `REFERENCE (match this header/footer style):\n${indexHtmlReference.substring(0, 2000)}` : ''}`
+
+  const response = await openai.chat.completions.create({
+    model: 'deepseek-chat',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Create the ${pageName} page for: ${originalPrompt}` }
+    ],
+    max_tokens: 8192,
+    temperature: 0.7
+  })
+
+  let html = response.choices[0]?.message?.content || ''
+  
+  // Clean up the response
+  html = html.replace(/```html\s*/g, '').replace(/```\s*/g, '').trim()
+  
+  // Ensure it starts with DOCTYPE
+  if (!html.includes('<!DOCTYPE')) {
+    html = '<!DOCTYPE html>\n<html lang="en">\n' + html
+  }
+  if (!html.includes('</html>')) {
+    html += '\n</html>'
+  }
+  
+  return html
+}
+
+// Simple generation for modifications or simple requests
+async function generateSimple(
+  jobId: string,
+  prompt: string,
+  existingFiles: Record<string, string>,
+  isModification: boolean,
+  userId: string,
+  projectId: string,
+  updateStatus: Function,
+  supabase: any,
+  history: Array<{ role: 'user' | 'ai', content: string }>
+) {
+  const model = isModification ? "deepseek-chat" : "deepseek-reasoner"
+
+  await updateStatus({
+    status: 'processing',
+    progress: 10,
+    currentStep: isModification ? '✏️ Applying your changes...' : '🎨 Designing your website...'
+  })
+
+  const systemPrompt = buildSystemPrompt(isModification, existingFiles)
+  const userMessage = buildUserMessage(prompt, isModification, existingFiles)
+
+  // Debug logging
+  console.log('[MODIFICATION] isModification:', isModification)
+  console.log('[MODIFICATION] User prompt:', prompt)
+  console.log('[MODIFICATION] Existing files:', Object.keys(existingFiles))
+  console.log('[MODIFICATION] User message type:', 
+    userMessage.includes('ADD A NEW PAGE') ? 'NEW_PAGE' :
+    userMessage.includes('FIX A BUG') ? 'BUG_FIX' :
+    userMessage.includes('CHANGE STYLING') ? 'STYLE_CHANGE' :
+    userMessage.includes('EDIT CONTENT') ? 'CONTENT_EDIT' : 'GENERAL_MODIFY'
+  )
+
+  const relevantHistory = history.slice(-6)
+  const apiMessages = [
+    { role: "system", content: systemPrompt },
+    ...relevantHistory
+      .filter(msg => msg.content && !msg.content.startsWith('Starting generation') && !msg.content.includes('%'))
+      .map(msg => ({ 
+        role: msg.role === 'ai' ? 'assistant' : 'user', 
+        content: msg.content 
+      })),
+    { role: "user", content: userMessage }
+  ]
+
+  await updateStatus({
+    progress: 20,
+    currentStep: isModification ? '✏️ Applying your changes...' : '🎨 Writing code...'
+  })
+
+  const stream = await openai.chat.completions.create({
+    model: model,
+    messages: apiMessages as any,
+    stream: true,
+    max_tokens: 8192,
+    temperature: 0.7,
+    response_format: { type: "json_object" },
+    ...(model === 'deepseek-reasoner' ? { extra_body: { thinking: { type: "enabled" } } } : {})
+  } as any) as unknown as AsyncIterable<any>
+
+  let fullContent = ''
+  let fullReasoning = ''
+  let lastUpdate = Date.now()
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta as any
+    
+    if (delta?.reasoning_content) {
+      fullReasoning += delta.reasoning_content
+    }
+    if (delta?.content) {
+      fullContent += delta.content
+    }
+
+    if (Date.now() - lastUpdate > 2000) {
+      const progress = Math.min(85, 20 + (fullContent.length / 500))
+      await updateStatus({ 
+        progress,
+        currentStep: '💻 Generating code...',
+        files: { '_reasoning': fullReasoning }
+      })
+      lastUpdate = Date.now()
+    }
+  }
+
+  await updateStatus({ 
+    progress: 92, 
+    currentStep: '⚙️ Processing output...',
+    files: { '_reasoning': fullReasoning }
+  })
+
+  const files = parseAIOutput(fullContent, existingFiles, isModification)
+
+  if (!files || Object.keys(files).filter(k => k !== '_reasoning').length === 0) {
+    throw new Error('AI did not generate any files')
+  }
+
+  if (files['index.html'] && !files['index.html'].includes('<!DOCTYPE') && !files['index.html'].includes('<html')) {
+    throw new Error('Generated HTML appears to be incomplete')
+  }
+
+  await supabase
+    .from('projects')
+    .update({ 
+      code_content: JSON.stringify(files),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', projectId)
+    .eq('user_id', userId)
+
+  await supabase.from('messages').insert({
+    project_id: projectId,
+    role: 'ai',
+    content: 'Website updated successfully!'
+  })
+
+  await updateStatus({
+    status: 'completed',
+    files,
+    progress: 100,
+    currentStep: '✅ Done!'
+  })
+}
+
+// Post-process HTML to fix common issues
+function postProcessHtml(html: string): string {
+  return html
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\>/g, '>')
+    .replace(/\\</g, '<')
+    .replace(/\\\\/g, '\\')
 }
 
 function buildSystemPrompt(isModification: boolean, existingFiles: Record<string, string>): string {
@@ -279,234 +792,237 @@ DESIGN GUIDELINES:
   if (isModification) {
     return `${basePrompt}
 
-MODIFICATION MODE - Current files: ${fileList || 'index.html'}
+MODIFICATION MODE - You are modifying an existing website.
+Current files: ${fileList || 'index.html'}
 
-WHEN USER ASKS TO ADD A NEW PAGE (e.g. "add about page", "create contact page"):
-You MUST return MULTIPLE files in your JSON response:
-{
-  "about.html": "<!DOCTYPE html>...(new page with same header/nav/footer as index.html)...",
-  "index.html": "<!DOCTYPE html>...(UPDATED with navigation link to about.html)..."
-}
+RULES FOR MODIFICATIONS:
+1. READ the existing code carefully before making changes
+2. UNDERSTAND what the user wants to change
+3. PRESERVE everything that should NOT change
+4. RETURN complete file(s) - not partial code snippets
 
-WHEN USER ASKS TO EDIT EXISTING CONTENT:
-Return only the modified file:
-{
-  "index.html": "<!DOCTYPE html>...(with requested changes)..."
-}
+MODIFICATION TYPES:
 
-CRITICAL RULES:
-1. For NEW pages: Create a NEW .html file AND update index.html navigation
-2. New pages MUST have same header/nav/footer style as index.html
-3. Add links in navigation: <a href="about.html">About</a>
-4. Keep Home link: <a href="index.html">Home</a>
-5. PRESERVE all existing content not being changed`
+BUG FIX / ERROR:
+- Analyze the problem described by user
+- Find and fix the issue in the code
+- Test that fix doesn't break other things
+- Return the complete fixed file
+
+STYLE/DESIGN CHANGE:
+- Apply the requested visual changes
+- Keep content and structure the same
+- Ensure consistency throughout
+
+CONTENT EDIT:
+- Change only the specific content mentioned
+- Preserve all styling and layout
+- Keep links and functionality working
+
+ADD NEW PAGE:
+- Create new .html file with same design as index.html
+- Update index.html navigation to include new page link
+- Return BOTH files: { "about.html": "...", "index.html": "...(updated nav)" }
+
+ADD NEW FEATURE/SECTION:
+- Add the requested feature/section
+- Integrate it into existing design
+- Update navigation if needed
+
+OUTPUT FORMAT:
+{ "filename.html": "<!DOCTYPE html>...(complete HTML)..." }
+
+IMPORTANT: Return COMPLETE files, not partial code. The entire file will be replaced.`
   }
 
   return `${basePrompt}
 
 NEW WEBSITE MODE:
-You are creating a brand new website from scratch.
-
-REQUIREMENTS:
-1. Create a complete, production-ready website
-2. Include all necessary sections (hero, features, about, contact, footer, etc.)
-3. Make it visually stunning with modern design
-4. Include placeholder content that makes sense
-5. Add interactive elements (buttons, forms, animations)
-6. Ensure the website is fully functional`
+Create a complete, production-ready website with:
+1. All necessary sections (hero, features, about, contact, footer)
+2. Visually stunning modern design
+3. Interactive elements and animations
+4. Fully functional and responsive`
 }
 
 function buildUserMessage(prompt: string, isModification: boolean, existingFiles: Record<string, string>): string {
   if (!isModification) {
-    return `Create a new website based on this description:
-
-${prompt}
-
-Remember: Return ONLY a JSON object with file contents. No explanations.`
+    return `Create a new website: ${prompt}\n\nReturn ONLY JSON with file contents.`
   }
 
-  // For modifications, include the current code context
-  const currentFilesContext = Object.entries(existingFiles)
+  const filesContext = Object.entries(existingFiles)
     .filter(([key]) => key !== '_reasoning')
     .map(([filename, content]) => {
-      // Truncate very long files to avoid token limits
-      const truncatedContent = content.length > 3000 
-        ? content.substring(0, 3000) + '\n<!-- ... content truncated ... -->'
+      const truncated = content.length > 4000 
+        ? content.substring(0, 4000) + '\n<!-- ... content truncated ... -->'
         : content
-      return `=== ${filename} ===\n${truncatedContent}`
+      return `=== ${filename} ===\n${truncated}`
     })
     .join('\n\n')
 
-  // Detect if user is asking for a new page
   const lowerPrompt = prompt.toLowerCase()
-  const isNewPageRequest = lowerPrompt.includes('add') || lowerPrompt.includes('create') || 
-    lowerPrompt.includes('new page') || lowerPrompt.includes('about page') || 
-    lowerPrompt.includes('contact page') || lowerPrompt.includes('pricing page')
+  
+  // Detect modification type
+  const isNewPage = lowerPrompt.includes('add') && (lowerPrompt.includes('page') || lowerPrompt.includes('section'))
+    || lowerPrompt.includes('create') && lowerPrompt.includes('page')
+    || lowerPrompt.includes('new page')
+  
+  const isBugFix = lowerPrompt.includes('fix') || lowerPrompt.includes('bug') || lowerPrompt.includes('broken')
+    || lowerPrompt.includes('not working') || lowerPrompt.includes('error') || lowerPrompt.includes('issue')
+  
+  const isStyleChange = lowerPrompt.includes('color') || lowerPrompt.includes('style') || lowerPrompt.includes('font')
+    || lowerPrompt.includes('theme') || lowerPrompt.includes('dark') || lowerPrompt.includes('light')
+    || lowerPrompt.includes('design') || lowerPrompt.includes('look')
+  
+  const isContentEdit = lowerPrompt.includes('change') || lowerPrompt.includes('update') || lowerPrompt.includes('edit')
+    || lowerPrompt.includes('modify') || lowerPrompt.includes('replace') || lowerPrompt.includes('text')
 
-  if (isNewPageRequest) {
-    return `CURRENT WEBSITE:
-${currentFilesContext}
-
-USER REQUEST: ${prompt}
-
-IMPORTANT: User is asking for a NEW PAGE. You MUST:
-1. Create a NEW .html file (e.g., "about.html", "contact.html", "pricing.html")
-2. ALSO update index.html to add navigation link to the new page
-3. Use the SAME design style as index.html
+  let instructions = ''
+  
+  if (isNewPage) {
+    instructions = `
+TASK: ADD A NEW PAGE
+1. Create a NEW .html file for the requested page
+2. Copy the header/navigation/footer from index.html
+3. Update index.html to add navigation link to the new page
+4. Match the design style of existing pages
 
 Return JSON with MULTIPLE files:
-{
-  "about.html": "<!DOCTYPE html>...(complete new page)...",
-  "index.html": "<!DOCTYPE html>...(with navigation updated)..."
-}`
+{ "newpage.html": "<!DOCTYPE html>...", "index.html": "<!DOCTYPE html>...(with updated nav)" }`
+  } else if (isBugFix) {
+    instructions = `
+TASK: FIX A BUG/ISSUE
+1. Carefully analyze the user's description of the problem
+2. Find the issue in the code
+3. Fix it while preserving all other functionality
+4. Return the complete fixed file(s)
+
+Return JSON with the modified file(s).`
+  } else if (isStyleChange) {
+    instructions = `
+TASK: CHANGE STYLING/DESIGN
+1. Apply the requested style changes
+2. Ensure consistency across the entire page
+3. Keep all content and functionality the same
+4. Only modify CSS/styling, not the structure
+
+Return JSON with the modified file(s).`
+  } else if (isContentEdit) {
+    instructions = `
+TASK: EDIT CONTENT
+1. Make the specific content changes requested
+2. Preserve all other content and styling
+3. Keep the overall structure the same
+
+Return JSON with the modified file(s).`
+  } else {
+    instructions = `
+TASK: MODIFY WEBSITE
+1. Apply the requested changes
+2. Preserve existing content and design not being changed
+3. Keep the website functional
+
+Return JSON with the modified file(s).`
   }
 
-  return `CURRENT WEBSITE:
-${currentFilesContext}
+  return `CURRENT WEBSITE FILES:
+${filesContext}
 
 USER REQUEST: ${prompt}
-
-Apply the requested changes. Return JSON with the modified file(s).`
+${instructions}`
 }
 
 function parseAIOutput(rawContent: string, existingFiles: Record<string, string>, isModification: boolean): Record<string, string> {
   let files: Record<string, string> = {}
   
-  // Clean up the raw content
   let jsonString = rawContent
     .replace(/```json\s*/g, '')
     .replace(/```\s*/g, '')
     .trim()
-
-  // Remove any leading/trailing whitespace or newlines before the JSON
-  jsonString = jsonString.replace(/^\s*\n*/, '').replace(/\n*\s*$/, '')
+    .replace(/^\s*\n*/, '')
+    .replace(/\n*\s*$/, '')
 
   try {
-    // First attempt: direct parse
     files = JSON.parse(jsonString)
   } catch (e) {
-    console.log('Direct parse failed, attempting repairs...')
-    
-    // Attempt repairs
     try {
       files = JSON.parse(repairJson(jsonString))
     } catch (e2) {
-      console.log('Repair parse failed, attempting extraction...')
-      
-      // Try to extract content manually
       files = extractFilesManually(jsonString)
-      
       if (Object.keys(files).length === 0) {
-        // Last resort: wrap raw content as HTML
-        console.log('Extraction failed, using raw content...')
         if (jsonString.includes('<!DOCTYPE') || jsonString.includes('<html')) {
           files = { 'index.html': jsonString }
         } else {
-          throw new Error('Could not parse AI output as valid JSON or HTML')
+          throw new Error('Could not parse AI output')
         }
       }
     }
   }
 
-  // Post-process all files
   Object.keys(files).forEach(key => {
     if (typeof files[key] === 'string' && key !== '_reasoning') {
-      // Fix escape sequences
-      files[key] = files[key]
-        .replace(/\\n/g, '\n')
-        .replace(/\\t/g, '\t')
-        .replace(/\\"/g, '"')
-        .replace(/\\>/g, '>')
-        .replace(/\\</g, '<')
-        .replace(/\\\\/g, '\\')
+      files[key] = postProcessHtml(files[key])
     }
   })
 
-  // ALWAYS merge with existing files during modifications
-  // This ensures we don't lose existing pages when AI only returns new/modified ones
-  console.log('[AI-GEN] isModification:', isModification)
-  console.log('[AI-GEN] existingFiles keys:', Object.keys(existingFiles))
-  console.log('[AI-GEN] AI returned files keys:', Object.keys(files))
-  
   if (isModification) {
     Object.keys(existingFiles).forEach(key => {
       if (key !== '_reasoning' && !files[key]) {
-        // Keep existing files that weren't returned by AI
-        console.log('[AI-GEN] Preserving existing file:', key)
         files[key] = existingFiles[key]
       }
     })
-    console.log('[AI-GEN] Final merged files keys:', Object.keys(files))
   }
 
-  // Remove the _reasoning key if present
   delete files['_reasoning']
-
   return files
 }
 
 function repairJson(str: string): string {
   let repaired = str
-  
-  // Fix common escape sequence issues
-  repaired = repaired.replace(/\\>/g, '>')
-  repaired = repaired.replace(/\\</g, '<')
-  repaired = repaired.replace(/\\'/g, "'")
-  
-  // Remove control characters except newlines, tabs, returns
-  repaired = repaired.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-  
-  // Fix truncated JSON
-  if (repaired.startsWith('{') && !repaired.endsWith('}')) {
-    // Find the last complete string
-    const lastQuoteIndex = repaired.lastIndexOf('"')
-    if (lastQuoteIndex > 0) {
-      repaired = repaired.substring(0, lastQuoteIndex + 1) + '}'
+    .replace(/\\>/g, '>')
+    .replace(/\\</g, '<')
+    .replace(/[\x00-\x1F\x7F]/g, (char) => {
+      if (char === '\n') return '\\n'
+      if (char === '\r') return '\\r'
+      if (char === '\t') return '\\t'
+      return ''
+    })
+
+  if (!repaired.endsWith('}')) {
+    const lastBrace = repaired.lastIndexOf('}')
+    if (lastBrace > 0) {
+      repaired = repaired.substring(0, lastBrace + 1)
     }
   }
-  
+
   return repaired
 }
 
-function extractFilesManually(str: string): Record<string, string> {
+function extractFilesManually(content: string): Record<string, string> {
   const files: Record<string, string> = {}
-  
-  // Try to find file patterns like "filename.html": "content"
-  const filePattern = /"([^"]+\.html?)"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|"$)/g
+  const regex = /"([^"]+\.html)":\s*"([\s\S]*?)(?:(?<!\\)"(?=\s*[,}]))/g
   let match
-  
-  while ((match = filePattern.exec(str)) !== null) {
+
+  while ((match = regex.exec(content)) !== null) {
     const filename = match[1]
-    let content = match[2]
-    
-    // Unescape the content
-    content = content
+    let fileContent = match[2]
       .replace(/\\n/g, '\n')
       .replace(/\\t/g, '\t')
       .replace(/\\"/g, '"')
       .replace(/\\\\/g, '\\')
-      .replace(/\\>/g, '>')
-      .replace(/\\</g, '<')
-    
-    files[filename] = content
+    files[filename] = fileContent
   }
-  
+
   return files
 }
 
 export async function getGenerationStatus(jobId: string): Promise<GenerationJob | null> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return null
-  }
   
   const { data, error } = await supabase
     .from('generation_jobs')
     .select('*')
     .eq('id', jobId)
-    .eq('user_id', user.id)
     .single()
 
   if (error || !data) {
@@ -516,9 +1032,65 @@ export async function getGenerationStatus(jobId: string): Promise<GenerationJob 
   return {
     id: data.id,
     status: data.status,
-    progress: data.progress,
     currentStep: data.current_step,
+    progress: data.progress,
     files: data.files || {},
-    error: data.error
+    error: data.error,
+    tasks: data.tasks || [],
+    currentTaskIndex: data.current_task_index || 0,
+    totalTasks: data.total_tasks || 0
+  }
+}
+
+// Get active (running) job for a project - used to resume on page refresh
+export async function getActiveJobForProject(projectId: string): Promise<GenerationJob | null> {
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  // Find any job that's still pending or processing
+  const { data, error } = await supabase
+    .from('generation_jobs')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('user_id', user.id)
+    .in('status', ['pending', 'processing'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  // Check if job is stale (older than 10 minutes) - mark as error
+  const createdAt = new Date(data.created_at)
+  const now = new Date()
+  const ageMinutes = (now.getTime() - createdAt.getTime()) / 1000 / 60
+
+  if (ageMinutes > 10) {
+    // Mark stale job as error
+    await supabase
+      .from('generation_jobs')
+      .update({ 
+        status: 'error', 
+        error: 'Job timed out',
+        current_step: 'Timed out'
+      })
+      .eq('id', data.id)
+    return null
+  }
+
+  return {
+    id: data.id,
+    status: data.status,
+    currentStep: data.current_step,
+    progress: data.progress,
+    files: data.files || {},
+    error: data.error,
+    tasks: data.tasks || [],
+    currentTaskIndex: data.current_task_index || 0,
+    totalTasks: data.total_tasks || 0
   }
 }

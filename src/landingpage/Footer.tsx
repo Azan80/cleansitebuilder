@@ -1,9 +1,8 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
-import { Twitter, Github, Linkedin } from "lucide-react";
+import { Github, Linkedin, Twitter } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 
 export const Footer = () => {
   return (
@@ -24,7 +23,7 @@ export const Footer = () => {
             <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-6">Product</h4>
             <ul className="space-y-4 text-gray-400 text-sm font-medium">
               <li><Link href="#" className="hover:text-indigo-400 transition-colors">Features</Link></li>
-              <li><Link href="#" className="hover:text-indigo-400 transition-colors">Pricing</Link></li>
+              <li><Link href="/pricing" className="hover:text-indigo-400 transition-colors">Pricing</Link></li>
               <li><Link href="#" className="hover:text-indigo-400 transition-colors">Changelog</Link></li>
             </ul>
           </div>
@@ -52,9 +51,9 @@ export const Footer = () => {
             © {new Date().getFullYear()} CleanSiteBuilder Inc. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
-             <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Twitter className="w-5 h-5" /></Link>
-             <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Github className="w-5 h-5" /></Link>
-             <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Linkedin className="w-5 h-5" /></Link>
+            <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Twitter className="w-5 h-5" /></Link>
+            <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Github className="w-5 h-5" /></Link>
+            <Link href="#" className="text-gray-400 hover:text-white transition-colors"><Linkedin className="w-5 h-5" /></Link>
           </div>
         </div>
       </div>
