@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
   ChevronRight,
+  Crown,
   Folder,
   Layout,
   Loader2,
@@ -16,9 +17,11 @@ import {
   Plus,
   Search,
   Settings, Trash2, User,
-  X
+  X,
+  Zap
 } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -33,6 +36,7 @@ export default function BuilderPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [subscription, setSubscription] = useState<{ status: string; plan: string | null; generationCount: number; generationLimit: number } | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -46,6 +50,24 @@ export default function BuilderPage() {
         // Fetch projects
         const userProjects = await getProjects()
         setProjects(userProjects)
+
+        // Fetch subscription status
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('subscription_status, subscription_plan, generation_count')
+          .eq('id', user.id)
+          .single()
+
+        if (profile) {
+          const plan = profile.subscription_plan || 'Free'
+          const limit = plan === 'Pro' ? 250 : plan === 'Starter' ? 100 : 5
+          setSubscription({
+            status: profile.subscription_status || 'free',
+            plan: profile.subscription_plan,
+            generationCount: profile.generation_count || 0,
+            generationLimit: limit
+          })
+        }
       }
       setLoading(false)
     }
@@ -151,7 +173,16 @@ export default function BuilderPage() {
             </div>
             <div className={`flex-1 overflow-hidden transition-all duration-300 ${isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
               <div className="text-xs font-medium truncate">{user?.email}</div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400">Free Plan</div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                {subscription?.status === 'active' ? (
+                  <>
+                    {subscription.plan === 'Pro' ? <Crown className="w-3 h-3 text-purple-400" /> : <Zap className="w-3 h-3 text-blue-400" />}
+                    {subscription.plan} Plan
+                  </>
+                ) : (
+                  'Free Plan'
+                )}
+              </div>
             </div>
             <LogOut
               onClick={handleSignOut}
@@ -189,6 +220,24 @@ export default function BuilderPage() {
             <div className="h-4 w-px bg-gray-200 dark:bg-white/10 mx-2" />
 
             <ThemeToggle />
+
+            {/* Subscription Badge */}
+            {subscription?.status === 'active' ? (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20">
+                {subscription.plan === 'Pro' ? <Crown className="w-4 h-4 text-purple-400" /> : <Zap className="w-4 h-4 text-blue-400" />}
+                <span className="text-xs font-medium text-purple-400">{subscription.plan}</span>
+                <span className="text-[10px] text-gray-400">{subscription.generationCount}/{subscription.generationLimit}</span>
+              </div>
+            ) : (
+              <Link
+                href="/pricing"
+                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium hover:opacity-90 transition-opacity"
+              >
+                <Zap className="w-3 h-3" />
+                Upgrade
+              </Link>
+            )}
+
             <button className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition-colors relative">
               <Bell className="w-4 h-4" />
               <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full border-2 border-white dark:border-[#0a0a0a]" />
