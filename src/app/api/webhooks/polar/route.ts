@@ -2,10 +2,12 @@ import { Webhooks } from "@polar-sh/nextjs";
 import { createClient } from "@supabase/supabase-js";
 
 // Create admin Supabase client that bypasses RLS
-// IMPORTANT: Use SUPABASE_SERVICE_ROLE_KEY for webhook operations
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  console.log("[POLAR WEBHOOK] Supabase URL:", url ? "Set" : "MISSING!");
+  console.log("[POLAR WEBHOOK] Service Role Key:", serviceRoleKey ? "Set" : "MISSING!");
   
   if (!url || !serviceRoleKey) {
     console.error("[POLAR WEBHOOK] Missing Supabase credentials");
@@ -20,193 +22,240 @@ function getSupabaseAdmin() {
   });
 }
 
+// Helper to find and update user
+async function updateUserSubscription(
+  customerEmail: string,
+  customerId: string | undefined,
+  subscriptionData: {
+    status: string;
+    plan: string | null;
+    subscriptionId: string | null;
+    endsAt: string | null;
+  }
+) {
+  console.log("[POLAR] Updating subscription for:", customerEmail);
+  console.log("[POLAR] Subscription data:", JSON.stringify(subscriptionData));
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // First, try to find profile by email
+  const { data: profiles, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("id, email")
+    .eq("email", customerEmail);
+
+  if (profileError) {
+    console.error("[POLAR] Error querying profiles:", profileError.message);
+  }
+
+  if (profiles && profiles.length > 0) {
+    const profile = profiles[0];
+    console.log("[POLAR] Found profile:", profile.id);
+    
+    const { error: updateError } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        subscription_status: subscriptionData.status,
+        subscription_plan: subscriptionData.plan,
+        subscription_id: subscriptionData.subscriptionId,
+        subscription_ends_at: subscriptionData.endsAt,
+        polar_customer_id: customerId || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id);
+
+    if (updateError) {
+      console.error("[POLAR] Error updating profile:", updateError.message);
+      return false;
+    }
+    
+    console.log("[POLAR] Successfully updated profile:", profile.id);
+    return true;
+  }
+
+  console.log("[POLAR] Profile not found by email, checking auth.users...");
+
+  // If profile not found, try to find user in auth.users and create profile
+  try {
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (authError) {
+      console.error("[POLAR] Error listing users:", authError.message);
+      return false;
+    }
+
+    const authUser = authData?.users?.find(u => u.email === customerEmail);
+    
+    if (!authUser) {
+      console.error("[POLAR] User not found in auth.users for email:", customerEmail);
+      return false;
+    }
+
+    console.log("[POLAR] Found auth user:", authUser.id);
+
+    // Insert new profile
+    const { error: insertError } = await supabaseAdmin
+      .from("profiles")
+      .insert({
+        id: authUser.id,
+        email: customerEmail,
+        subscription_status: subscriptionData.status,
+        subscription_plan: subscriptionData.plan,
+        subscription_id: subscriptionData.subscriptionId,
+        subscription_ends_at: subscriptionData.endsAt,
+        polar_customer_id: customerId || null,
+        generation_count: 0,
+        generation_reset_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (insertError) {
+      console.error("[POLAR] Error inserting profile:", insertError.message);
+      
+      // Maybe profile exists, try update instead
+      const { error: updateError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          subscription_status: subscriptionData.status,
+          subscription_plan: subscriptionData.plan,
+          subscription_id: subscriptionData.subscriptionId,
+          subscription_ends_at: subscriptionData.endsAt,
+          polar_customer_id: customerId || null,
+        })
+        .eq("id", authUser.id);
+
+      if (updateError) {
+        console.error("[POLAR] Error updating profile after insert failed:", updateError.message);
+        return false;
+      }
+    }
+
+    console.log("[POLAR] Successfully created/updated profile for user:", authUser.id);
+    return true;
+  } catch (error) {
+    console.error("[POLAR] Error in updateUserSubscription:", error);
+    return false;
+  }
+}
+
 export const POST = Webhooks({
   webhookSecret: process.env.POLAR_WEBHOOK_SECRET!,
+
+  onPayload: async (payload) => {
+    // Log all incoming webhooks for debugging
+    console.log("=".repeat(50));
+    console.log("[POLAR WEBHOOK] Received event type:", payload.type);
+    console.log("[POLAR WEBHOOK] Event data:", JSON.stringify(payload.data, null, 2));
+    console.log("=".repeat(50));
+  },
   
-  // Called when subscription becomes active (new or renewed)
   onSubscriptionActive: async (payload) => {
-    console.log("[POLAR] Subscription activated:", JSON.stringify(payload.data, null, 2));
+    console.log("[POLAR] === SUBSCRIPTION ACTIVE ===");
     
     try {
-      const supabaseAdmin = getSupabaseAdmin();
       const subscription = payload.data;
       const customerEmail = subscription.customer?.email;
       const customerId = subscription.customer?.id;
       
       if (!customerEmail) {
-        console.error("[POLAR] No customer email in subscription");
+        console.error("[POLAR] No customer email in subscription payload");
         return;
       }
 
-      console.log("[POLAR] Looking for user with email:", customerEmail);
-
-      // Find user by email in profiles table
-      const { data: profile, error: profileError } = await supabaseAdmin
-        .from("profiles")
-        .select("id, email")
-        .eq("email", customerEmail)
-        .single();
-
-      if (profileError || !profile) {
-        console.log("[POLAR] Profile not found, trying auth.users email:", profileError?.message);
-        
-        // Try to find by auth user email
-        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
-        const authUser = authUsers?.users?.find(u => u.email === customerEmail);
-        
-        if (!authUser) {
-          console.error("[POLAR] User not found for email:", customerEmail);
-          return;
-        }
-        
-        // Create or update profile
-        const { error: upsertError } = await supabaseAdmin
-          .from("profiles")
-          .upsert({
-            id: authUser.id,
-            email: customerEmail,
-            subscription_status: "active",
-            subscription_plan: subscription.product?.name || "Starter",
-            subscription_id: subscription.id,
-            subscription_ends_at: subscription.currentPeriodEnd,
-            polar_customer_id: customerId,
-            generation_count: 0,
-            generation_reset_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-        
-        if (upsertError) {
-          console.error("[POLAR] Error upserting profile:", upsertError);
-        } else {
-          console.log("[POLAR] Created/updated profile for user:", authUser.id);
-        }
-        return;
-      }
-
-      // Update existing profile
-      const { error: updateError } = await supabaseAdmin
-        .from("profiles")
-        .update({
-          subscription_status: "active",
-          subscription_plan: subscription.product?.name || "Starter",
-          subscription_id: subscription.id,
-          subscription_ends_at: subscription.currentPeriodEnd,
-          polar_customer_id: customerId,
-        })
-        .eq("id", profile.id);
-
-      if (updateError) {
-        console.error("[POLAR] Error updating subscription:", updateError);
-      } else {
-        console.log("[POLAR] Updated subscription for user:", profile.id);
-      }
+      await updateUserSubscription(customerEmail, customerId, {
+        status: "active",
+        plan: subscription.product?.name || "Starter",
+        subscriptionId: subscription.id,
+        endsAt: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toISOString() : null,
+      });
     } catch (error) {
       console.error("[POLAR] Error in onSubscriptionActive:", error);
     }
   },
 
-  // Called when subscription is canceled (still active until end of period)
-  onSubscriptionCanceled: async (payload) => {
-    console.log("[POLAR] Subscription canceled:", payload.data.id);
+  onSubscriptionCreated: async (payload) => {
+    console.log("[POLAR] === SUBSCRIPTION CREATED ===");
     
     try {
-      const supabaseAdmin = getSupabaseAdmin();
       const subscription = payload.data;
+      const customerEmail = subscription.customer?.email;
+      const customerId = subscription.customer?.id;
       
-      // Find user by subscription ID
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("subscription_id", subscription.id)
-        .single();
-
-      if (!profile) {
-        // Try by customer email
-        const customerEmail = subscription.customer?.email;
-        if (customerEmail) {
-          const { data: profileByEmail } = await supabaseAdmin
-            .from("profiles")
-            .select("id")
-            .eq("email", customerEmail)
-            .single();
-          
-          if (profileByEmail) {
-            await supabaseAdmin
-              .from("profiles")
-              .update({
-                subscription_status: "canceled",
-                subscription_ends_at: subscription.currentPeriodEnd,
-              })
-              .eq("id", profileByEmail.id);
-            console.log("[POLAR] Canceled subscription for user:", profileByEmail.id);
-          }
-        }
+      if (!customerEmail) {
+        console.error("[POLAR] No customer email in subscription payload");
         return;
       }
 
-      // Update subscription status
-      await supabaseAdmin
-        .from("profiles")
-        .update({
-          subscription_status: "canceled",
-          subscription_ends_at: subscription.currentPeriodEnd,
-        })
-        .eq("id", profile.id);
+      const status = subscription.status === "active" ? "active" : "pending";
 
-      console.log("[POLAR] Canceled subscription for user:", profile.id);
+      await updateUserSubscription(customerEmail, customerId, {
+        status: status,
+        plan: subscription.product?.name || "Starter",
+        subscriptionId: subscription.id,
+        endsAt: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toISOString() : null,
+      });
+    } catch (error) {
+      console.error("[POLAR] Error in onSubscriptionCreated:", error);
+    }
+  },
+
+  onSubscriptionCanceled: async (payload) => {
+    console.log("[POLAR] === SUBSCRIPTION CANCELED ===");
+    
+    try {
+      const subscription = payload.data;
+      const customerEmail = subscription.customer?.email;
+      const customerId = subscription.customer?.id;
+      
+      if (!customerEmail) {
+        console.error("[POLAR] No customer email");
+        return;
+      }
+
+      await updateUserSubscription(customerEmail, customerId, {
+        status: "canceled",
+        plan: subscription.product?.name || null,
+        subscriptionId: subscription.id,
+        endsAt: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toISOString() : null,
+      });
     } catch (error) {
       console.error("[POLAR] Error in onSubscriptionCanceled:", error);
     }
   },
 
-  // Called when subscription is revoked (immediate access removal)
   onSubscriptionRevoked: async (payload) => {
-    console.log("[POLAR] Subscription revoked:", payload.data.id);
+    console.log("[POLAR] === SUBSCRIPTION REVOKED ===");
     
     try {
-      const supabaseAdmin = getSupabaseAdmin();
       const subscription = payload.data;
+      const customerEmail = subscription.customer?.email;
       
-      // Find user by subscription ID
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("subscription_id", subscription.id)
-        .single();
-
-      if (!profile) {
+      if (!customerEmail) {
         return;
       }
 
-      // Revoke access
-      await supabaseAdmin
-        .from("profiles")
-        .update({
-          subscription_status: "expired",
-          subscription_plan: null,
-          subscription_id: null,
-        })
-        .eq("id", profile.id);
-
-      console.log("[POLAR] Revoked subscription for user:", profile.id);
+      await updateUserSubscription(customerEmail, undefined, {
+        status: "expired",
+        plan: null,
+        subscriptionId: null,
+        endsAt: null,
+      });
     } catch (error) {
       console.error("[POLAR] Error in onSubscriptionRevoked:", error);
     }
   },
 
-  // Called when an order is paid (one-time or subscription first payment)
   onOrderPaid: async (payload) => {
-    console.log("[POLAR] Order paid:", JSON.stringify(payload.data, null, 2));
-    
-    // The subscription handlers above will handle subscription-related orders
-    // This is mainly for one-time purchases or logging
+    console.log("[POLAR] === ORDER PAID ===");
+    console.log("[POLAR] Order ID:", payload.data.id);
+    console.log("[POLAR] Customer email:", payload.data.customer?.email);
   },
 
-  // Called when checkout is created
   onCheckoutCreated: async (payload) => {
     console.log("[POLAR] Checkout created:", payload.data.id);
   },
 
-  // Called when checkout is updated (e.g., completed)
   onCheckoutUpdated: async (payload) => {
     console.log("[POLAR] Checkout updated:", payload.data.id, "Status:", payload.data.status);
   },
