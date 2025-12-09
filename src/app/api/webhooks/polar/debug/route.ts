@@ -6,7 +6,7 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     environment_variables: {
       NEXT_PUBLIC_SUPABASE_URL: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       POLAR_WEBHOOK_SECRET: !!process.env.POLAR_WEBHOOK_SECRET,
       POLAR_ACCESS_TOKEN: !!process.env.POLAR_ACCESS_TOKEN,
     },
@@ -18,7 +18,7 @@ export async function GET() {
   // Test Supabase connection
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (url && key) {
       const supabase = createClient(url, key);
