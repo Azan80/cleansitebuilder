@@ -66,9 +66,6 @@ export const Hero = () => {
 
 
                <motion.h1
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
                   className="text-5xl md:text-7xl font-bold text-white mb-6 tracking-tight leading-tight"
                >
                   Generate Website Templates <br />
@@ -78,9 +75,6 @@ export const Hero = () => {
                </motion.h1>
 
                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
                   className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto"
                >
                   Experience the future of web development. Build production-ready websites with AI—faster and more efficiently than ever before.
