@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import OpenAI from 'openai';
+import { canUserGenerate, incrementGenerationCount } from './subscription-actions';
 
 const openai = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY || process.env.NEXT_OPENAI_KEY || process.env.OPENAI_API_KEY,
@@ -41,6 +42,17 @@ export async function startWebsiteGeneration(
 
   if (!user) {
     return { success: false, error: 'Unauthorized' }
+  }
+
+  // Check if user can generate (subscription limits)
+  const canGenerate = await canUserGenerate();
+  if (!canGenerate.allowed) {
+    return { 
+      success: false, 
+      error: canGenerate.reason || 'Generation limit reached',
+      limitReached: true,
+      limits: canGenerate.limits
+    }
   }
 
   // 1. Save User Message to DB
@@ -537,6 +549,9 @@ async function generateWithAgentWorkflow(
     progress: 100,
     currentStep: '✅ Done!'
   })
+
+  // Increment generation count for multi-page generation
+  await incrementGenerationCount();
 }
 
 // Generate design specification
@@ -749,6 +764,9 @@ async function generateSimple(
     progress: 100,
     currentStep: '✅ Done!'
   })
+
+  // Increment generation count for single-page generation
+  await incrementGenerationCount();
 }
 
 // Post-process HTML to fix common issues

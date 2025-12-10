@@ -1,8 +1,8 @@
 'use client'
 
 import { createClient } from '@/utils/supabase/client'
-import { motion } from 'framer-motion'
-import { AlertCircle, Loader2, Lock, Mail } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Lock, Mail, X } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -13,6 +13,8 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showVerifiedModal, setShowVerifiedModal] = useState(false)
+  const [showNotVerifiedModal, setShowNotVerifiedModal] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectUrl = searchParams.get('redirect') || '/builder'
@@ -26,7 +28,13 @@ function LoginForm() {
       }
     }
     checkUser()
-  }, [router, supabase, redirectUrl])
+
+    if (searchParams.get('verified') === 'true') {
+      setShowVerifiedModal(true)
+      // Optional: Clean up URL
+      // router.replace('/login') 
+    }
+  }, [router, supabase, redirectUrl, searchParams])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,7 +47,11 @@ function LoginForm() {
     })
 
     if (error) {
-      setError(error.message)
+      if (error.message.includes('Email not confirmed')) {
+        setShowNotVerifiedModal(true)
+      } else {
+        setError(error.message)
+      }
       setLoading(false)
     } else {
       router.push(redirectUrl)
@@ -178,7 +190,81 @@ function LoginForm() {
           </p>
         </div>
       </motion.div>
-    </div>
+
+
+      {/* Verified Success Modal */}
+      <AnimatePresence>
+        {showVerifiedModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowVerifiedModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl text-center"
+            >
+              <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/20">
+                <CheckCircle2 className="w-8 h-8 text-green-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Email Verified!</h3>
+              <p className="text-gray-400 mb-6">
+                Your account has been successfully verified. You can now sign in.
+              </p>
+              <button
+                onClick={() => setShowVerifiedModal(false)}
+                className="w-full bg-white text-black font-bold rounded-xl py-3 hover:bg-gray-200 transition-all"
+              >
+                Continue to Login
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Not Verified Modal */}
+      <AnimatePresence>
+        {showNotVerifiedModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowNotVerifiedModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl text-center"
+            >
+              <button
+                onClick={() => setShowNotVerifiedModal(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-yellow-500/20">
+                <AlertTriangle className="w-8 h-8 text-yellow-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Not Verified</h3>
+              <p className="text-gray-400 mb-6">
+                Your email address has not been verified yet. Please check your inbox for the verification link.
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowNotVerifiedModal(false)}
+                  className="w-full bg-white text-black font-bold rounded-xl py-3 hover:bg-gray-200 transition-all"
+                >
+                  Okay, I'll check
+                </button>
+                {/* Optional: Add Resend Link button logic here if needed */}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div >
   )
 }
 
