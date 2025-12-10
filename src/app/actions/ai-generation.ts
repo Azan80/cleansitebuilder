@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server';
+import { after } from 'next/server';
 import OpenAI from 'openai';
 import { canUserGenerate, incrementGenerationCount } from './subscription-actions';
 
@@ -85,8 +86,10 @@ export async function startWebsiteGeneration(
     return { success: false, error: error.message }
   }
 
-  // Start background generation (fire and forget)
-  generateInBackground(jobId, prompt, projectId, currentCode, user.id, history).catch(console.error)
+  // Start background generation (fire and forget, safe with after)
+  after(() => {
+    generateInBackground(jobId, prompt, projectId, currentCode, user.id, history).catch(console.error)
+  })
 
   return { success: true, jobId }
 }
@@ -460,50 +463,57 @@ async function generateWithAgentWorkflow(
   await new Promise(r => setTimeout(r, 500))
   tasks[1].status = 'completed'
   
-  // Step 3: Generate pages one by one
+  // Step 3: Generate pages in parallel batches
   const generatedFiles: Record<string, string> = {}
   const pageCount = pageNames.length
-  
-  for (let i = 0; i < pageNames.length; i++) {
-    const pageName = pageNames[i]
-    const fileName = pageName === 'home' ? 'index.html' : `${pageName}.html`
-    const taskIndex = i + 2 // Offset for plan and design tasks
+  const BATCH_SIZE = 4 // Generate 4 pages at a time
+
+  for (let i = 0; i < pageNames.length; i += BATCH_SIZE) {
+    const batch = pageNames.slice(i, i + BATCH_SIZE)
     
-    tasks[taskIndex].status = 'in_progress'
-    const progressPercent = 20 + Math.floor((i / pageCount) * 60)
+    // Mark batch as in progress
+    batch.forEach((_, idx) => {
+      const taskIndex = i + idx + 2
+      if (tasks[taskIndex]) tasks[taskIndex].status = 'in_progress'
+    })
     
-    await updateStatus({
+    await updateStatus({ 
       tasks,
-      currentTaskIndex: taskIndex,
-      progress: progressPercent,
-      currentStep: `📄 Creating ${fileName} (${i + 1}/${pageCount})...`
+      currentStep: `📄 Generating pages ${i + 1}-${Math.min(i + BATCH_SIZE, pageCount)} of ${pageCount}...`
     })
 
-    try {
-      const pageHtml = await generateSinglePage(
-        prompt, 
-        designSpec, 
-        pageName, 
-        fileName,
-        pageNames,
-        generatedFiles['index.html'] // Pass index.html for style reference
-      )
+    const batchPromises = batch.map(async (pageName, batchIdx) => {
+      const globalIdx = i + batchIdx
+      const fileName = pageName === 'home' ? 'index.html' : `${pageName}.html`
+      const taskIndex = globalIdx + 2
       
-      generatedFiles[fileName] = pageHtml
-      tasks[taskIndex].status = 'completed'
-      
-      // Update files progressively
-      await updateStatus({
-        tasks,
-        files: { ...generatedFiles, '_reasoning': designSpec },
-        progress: progressPercent + 10
-      })
-      
-    } catch (error: any) {
-      console.error(`Error generating ${fileName}:`, error)
-      tasks[taskIndex].status = 'error'
-      // Continue with other pages
-    }
+      try {
+        const pageHtml = await generateSinglePage(
+          prompt, 
+          designSpec, 
+          pageName, 
+          fileName,
+          pageNames,
+          generatedFiles['index.html'] // Pass index.html for style reference (might be undefined for first batch, which is fine)
+        )
+        
+        generatedFiles[fileName] = pageHtml
+        if (tasks[taskIndex]) tasks[taskIndex].status = 'completed'
+      } catch (error: any) {
+        console.error(`Error generating ${fileName}:`, error)
+        if (tasks[taskIndex]) tasks[taskIndex].status = 'error'
+      }
+    })
+
+    await Promise.all(batchPromises)
+
+    // Update progress after batch
+    const progressPercent = 20 + Math.floor((Math.min(i + BATCH_SIZE, pageCount) / pageCount) * 60)
+    await updateStatus({
+      tasks,
+      files: { ...generatedFiles, '_reasoning': designSpec },
+      progress: progressPercent
+    })
   }
 
   // Step 4: Finalize
@@ -653,7 +663,7 @@ async function generateSimple(
   supabase: any,
   history: Array<{ role: 'user' | 'ai', content: string }>
 ) {
-  const model = isModification ? "deepseek-chat" : "deepseek-reasoner"
+  const model = "deepseek-chat" // Use faster model for everything
 
   await updateStatus({
     status: 'processing',
@@ -699,7 +709,6 @@ async function generateSimple(
     max_tokens: 8192,
     temperature: 0.7,
     response_format: { type: "json_object" },
-    ...(model === 'deepseek-reasoner' ? { extra_body: { thinking: { type: "enabled" } } } : {})
   } as any) as unknown as AsyncIterable<any>
 
   let fullContent = ''

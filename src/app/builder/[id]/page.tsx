@@ -112,10 +112,11 @@ export default function ProjectEditorPage() {
             const { getGenerationStatus } = await import('@/app/actions/ai-generation')
 
             while (!cancelled && isGenerating) {
-                await new Promise(resolve => setTimeout(resolve, 1000))
-
                 const status = await getGenerationStatus(activeJobId)
-                if (!status) continue
+                if (!status) {
+                    await new Promise(resolve => setTimeout(resolve, 1000))
+                    continue
+                }
 
                 // Update agent tasks if available
                 if (status.tasks && status.tasks.length > 0) {
@@ -170,6 +171,8 @@ export default function ProjectEditorPage() {
                     setActiveJobId(null)
                     break
                 }
+
+                await new Promise(resolve => setTimeout(resolve, 1000))
             }
         }
 
