@@ -138,6 +138,8 @@ export default function BuilderPage() {
       const userProjects = await getProjects()
       setProjects(userProjects)
       setIsModalOpen(false)
+      // Redirect to the new project immediately
+      router.push(`/builder/${result.project.id}`)
     } else {
       alert(result.error)
     }
@@ -627,12 +629,11 @@ function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomai
   return (
     <motion.div
       whileHover={{ y: -4 }}
-      onClick={() => router.push(`/builder/${id}`)}
+      className="group relative aspect-[4/3] rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
       onMouseLeave={() => setShowMenu(false)}
-      className="group relative aspect-[4/3] rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col"
     >
-      {/* Website Preview Thumbnail */}
-      <div className="h-1/2 bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 relative overflow-hidden shrink-0">
+      {/* Website Preview Thumbnail Link */}
+      <Link href={`/builder/${id}`} className="block h-1/2 bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 relative overflow-hidden shrink-0 cursor-pointer">
         {previewHtml ? (
           <div className="absolute inset-0 origin-top-left" style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}>
             <iframe
@@ -653,7 +654,7 @@ function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomai
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-          <button className="bg-white dark:bg-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity transform scale-90 group-hover:scale-100">
+          <button className="bg-white dark:bg-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity transform scale-90 group-hover:scale-100 pointer-events-none">
             Edit
           </button>
         </div>
@@ -666,11 +667,13 @@ function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomai
             </div>
           </div>
         )}
-      </div>
+      </Link>
 
       <div className="p-4 flex flex-col flex-1 relative">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-sm truncate pr-2">{title}</h3>
+          <Link href={`/builder/${id}`} className="font-bold text-sm truncate pr-2 hover:text-indigo-500 transition-colors block flex-1">
+            {title}
+          </Link>
           <div className="relative">
             <button
               onClick={(e) => {
@@ -692,7 +695,8 @@ function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomai
                   className="absolute right-0 top-full mt-1 w-32 bg-white dark:bg-[#111] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl z-20 overflow-hidden"
                 >
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setShowMenu(false)
                       onDelete()
                     }}
