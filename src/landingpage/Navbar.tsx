@@ -1,7 +1,9 @@
 "use client";
 
+import { createClient } from "@/utils/supabase/client";
+import { User } from "@supabase/supabase-js";
 import { AnimatePresence, motion } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, User as UserIcon, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -9,12 +11,29 @@ import { useEffect, useState } from "react";
 export const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
     };
     window.addEventListener("scroll", handleScroll);
+
+    // Check auth status
+    const supabase = createClient();
+    const checkUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+      } catch (error) {
+        console.error("Auth check failed", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkUser();
+
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -24,8 +43,8 @@ export const Navbar = () => {
         <div className="pointer-events-auto w-full max-w-5xl">
           <div
             className={`transition-all duration-500 ease-in-out rounded-full border px-6 py-3 flex items-center justify-between ${isScrolled
-                ? "bg-[#0a0a0a]/80 backdrop-blur-xl border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]"
-                : "bg-transparent border-transparent"
+              ? "bg-[#0a0a0a]/80 backdrop-blur-xl border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]"
+              : "bg-transparent border-transparent"
               }`}
           >
 
@@ -57,16 +76,27 @@ export const Navbar = () => {
             </div>
 
             {/* CTA */}
-            <div className="hidden md:flex items-center gap-4">
-              <Link
-                href="/login"
-                className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-              >
-                Log in
-              </Link>
-              <Link href="/signup" className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)]">
-                Start Building
-              </Link>
+            <div className="hidden md:flex items-center gap-4 min-w-[140px] justify-end">
+              {isLoading ? (
+                <div className="h-10 w-32 bg-white/5 rounded-full animate-pulse" />
+              ) : user ? (
+                <Link href="/builder" className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)] flex items-center gap-2">
+                  <UserIcon className="w-4 h-4" />
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                  >
+                    Log in
+                  </Link>
+                  <Link href="/signup" className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)]">
+                    Start Building
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
@@ -108,15 +138,27 @@ export const Navbar = () => {
                 Pricing
               </Link>
               <div className="h-px bg-white/10 my-2" />
-              <Link
-                href="/login"
-                className="text-center py-4 text-gray-300 font-medium hover:text-white"
-              >
-                Log in
-              </Link>
-              <Link href="/signup" className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors text-center block">
-                Start Building
-              </Link>
+
+              {isLoading ? (
+                <div className="w-full h-14 bg-white/5 rounded-2xl animate-pulse" />
+              ) : user ? (
+                <Link href="/builder" className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors text-center flex items-center justify-center gap-2">
+                  <UserIcon className="w-5 h-5" />
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="text-center py-4 text-gray-300 font-medium hover:text-white"
+                  >
+                    Log in
+                  </Link>
+                  <Link href="/signup" className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors text-center block">
+                    Start Building
+                  </Link>
+                </>
+              )}
             </div>
           </motion.div>
         )}

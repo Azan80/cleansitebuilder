@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import JSZip from 'jszip'
+import { canUserAddCustomDomain } from './subscription-actions'
 
 const NETLIFY_ACCESS_TOKEN = process.env.NETLIFY_ACCESS_TOKEN
 
@@ -134,14 +135,49 @@ export async function updateProjectDomain(projectId: string, domain: string) {
   
   const supabase = await createClient()
   
+  // Check if user can add custom domain (subscription limits)
+  const canAddDomain = await canUserAddCustomDomain();
+  if (!canAddDomain.allowed) {
+    return { 
+      error: canAddDomain.reason || 'Custom domain limit reached',
+      limitReached: true,
+      limits: canAddDomain.limits
+    }
+  }
+  
   // Get project to find site_id
   const { data: project } = await supabase
     .from('projects')
-    .select('netlify_site_id')
+    .select('netlify_site_id, custom_domain, user_id')
     .eq('id', projectId)
     .single()
     
   if (!project?.netlify_site_id) return { error: 'Project not deployed yet' }
+  
+  // Normalize domain (remove http/https, trailing slashes)
+  const normalizedDomain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '').trim()
+  
+  // Check if this domain is already used by another project in our database
+  const { data: existingDomainProject, error: domainCheckError } = await supabase
+    .from('projects')
+    .select('id, name, user_id')
+    .eq('custom_domain', normalizedDomain)
+    .neq('id', projectId) // Exclude current project
+    .single()
+  
+  if (existingDomainProject) {
+    if (existingDomainProject.user_id === project.user_id) {
+      return { 
+        error: `This domain is already connected to your project "${existingDomainProject.name}". Please remove it from that project first.`,
+        domainInUse: true
+      }
+    } else {
+      return { 
+        error: 'This domain is already in use by another site. Please use a different domain.',
+        domainInUse: true
+      }
+    }
+  }
 
   try {
     // Update site with custom domain
@@ -152,22 +188,37 @@ export async function updateProjectDomain(projectId: string, domain: string) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        custom_domain: domain
+        custom_domain: normalizedDomain
       })
     })
 
     const data = await response.json()
     
     if (!response.ok) {
-      return { error: data.message || 'Failed to update domain' }
+      // Handle specific Netlify errors
+      const errorMessage = data.message || data.error || 'Failed to update domain'
+      
+      // Check for domain already taken by another Netlify site
+      if (errorMessage.toLowerCase().includes('domain') && 
+          (errorMessage.toLowerCase().includes('taken') || 
+           errorMessage.toLowerCase().includes('use') ||
+           errorMessage.toLowerCase().includes('already') ||
+           errorMessage.toLowerCase().includes('registered'))) {
+        return { 
+          error: 'This domain is already registered on Netlify with another site. If you own this domain, you may need to remove it from the other site first or contact Netlify support.',
+          domainInUse: true
+        }
+      }
+      
+      return { error: errorMessage }
     }
 
     // Update DB
     await supabase
       .from('projects')
       .update({ 
-        custom_domain: domain,
-        deployment_url: `https://${domain}` // Update URL to use custom domain
+        custom_domain: normalizedDomain,
+        deployment_url: `https://${normalizedDomain}`
       })
       .eq('id', projectId)
 
@@ -178,7 +229,7 @@ export async function updateProjectDomain(projectId: string, domain: string) {
     const siteData = await siteResponse.json()
     const cnameTarget = siteData.default_domain
 
-    return { success: true, url: `https://${domain}`, cnameTarget }
+    return { success: true, url: `https://${normalizedDomain}`, cnameTarget }
   } catch (e: any) {
     return { error: e.message }
   }
@@ -208,22 +259,75 @@ export async function getDomainStatus(projectId: string) {
     
     const data = await response.json()
     
+    // Get the default Netlify subdomain for CNAME target
+    const cnameTarget = data.default_domain
+    
     // Check SSL status if available
-    // Netlify returns ssl_url if SSL is active, or we can check processing_settings
-    // A more robust check might involve fetching the domain specific endpoint if needed,
-    // but usually site details contain enough info.
-    
-    // Simplified status logic:
-    // If custom_domain matches and ssl is true -> active
-    // If custom_domain matches but no ssl -> verifying
-    
     const isSslReady = data.ssl_url && data.ssl_url.includes(project.custom_domain)
     
     return {
       status: isSslReady ? 'active' : 'verifying',
       ssl: isSslReady,
-      domain: project.custom_domain
+      domain: project.custom_domain,
+      cnameTarget: cnameTarget // Include CNAME target for DNS instructions
     }
+  } catch (e: any) {
+    return { error: e.message }
+  }
+}
+
+export async function removeProjectDomain(projectId: string) {
+  if (!NETLIFY_ACCESS_TOKEN) return { error: 'Missing token' }
+  
+  const supabase = await createClient()
+  
+  // Get project to find site_id
+  const { data: project } = await supabase
+    .from('projects')
+    .select('netlify_site_id, custom_domain, deployment_url')
+    .eq('id', projectId)
+    .single()
+    
+  if (!project?.netlify_site_id) return { error: 'Project not deployed yet' }
+  if (!project?.custom_domain) return { error: 'No custom domain to remove' }
+
+  try {
+    // Get the default Netlify subdomain first
+    const siteResponse = await fetch(`https://api.netlify.com/api/v1/sites/${project.netlify_site_id}`, {
+      headers: { 'Authorization': `Bearer ${NETLIFY_ACCESS_TOKEN}` }
+    })
+    const siteData = await siteResponse.json()
+    const defaultDomain = siteData.default_domain
+    const netlifyUrl = siteData.ssl_url || siteData.url || `https://${defaultDomain}`
+
+    // Remove custom domain from Netlify
+    const response = await fetch(`https://api.netlify.com/api/v1/sites/${project.netlify_site_id}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${NETLIFY_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        custom_domain: null
+      })
+    })
+
+    const data = await response.json()
+    
+    if (!response.ok) {
+      return { error: data.message || 'Failed to remove domain' }
+    }
+
+    // Update DB - clear custom domain and restore Netlify URL
+    await supabase
+      .from('projects')
+      .update({ 
+        custom_domain: null,
+        deployment_url: netlifyUrl
+      })
+      .eq('id', projectId)
+
+    return { success: true, newUrl: netlifyUrl }
   } catch (e: any) {
     return { error: e.message }
   }

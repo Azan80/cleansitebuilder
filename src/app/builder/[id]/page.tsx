@@ -1,6 +1,6 @@
 'use client'
 
-import { deployToNetlify, getDomainStatus, updateProjectDomain } from '@/app/actions/deploy-actions'
+import { deployToNetlify, getDomainStatus, removeProjectDomain, updateProjectDomain } from '@/app/actions/deploy-actions'
 import { getProjectFiles } from '@/app/actions/download-actions'
 import { getProjectById } from '@/app/actions/project-actions'
 import { SandpackPreview } from '@/components/SandpackPreview'
@@ -24,6 +24,7 @@ import {
     Smartphone,
     Sparkles,
     Tablet,
+    Trash2,
     X
 } from 'lucide-react'
 import Image from 'next/image'
@@ -48,6 +49,7 @@ export default function ProjectEditorPage() {
     const [customDomain, setCustomDomain] = useState('')
     const [isConnectingDomain, setIsConnectingDomain] = useState(false)
     const [dnsInstructions, setDnsInstructions] = useState<{ domain: string, target: string } | null>(null)
+    const [isRemovingDomain, setIsRemovingDomain] = useState(false)
     const [domainStatus, setDomainStatus] = useState<'none' | 'verifying' | 'active' | 'error'>('none')
     const [reasoning, setReasoning] = useState('')
     const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string }>>([])
@@ -180,7 +182,7 @@ export default function ProjectEditorPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
-    // Poll for domain status
+    // Poll for domain status and get DNS instructions for existing domains
     useEffect(() => {
         let interval: NodeJS.Timeout
         if (isDomainModalOpen && project?.custom_domain) {
@@ -188,10 +190,22 @@ export default function ProjectEditorPage() {
                 const result = await getDomainStatus(project.id)
                 if (result.status) {
                     setDomainStatus(result.status as any)
+                    // Set DNS instructions so user can view them again
+                    if (result.cnameTarget && result.domain) {
+                        setDnsInstructions({
+                            domain: result.domain,
+                            target: result.cnameTarget
+                        })
+                    }
                 }
             }
             checkStatus()
             interval = setInterval(checkStatus, 5000)
+        } else {
+            // Clear DNS instructions when modal closes or no custom domain
+            if (!isDomainModalOpen) {
+                setDnsInstructions(null)
+            }
         }
         return () => clearInterval(interval)
     }, [isDomainModalOpen, project?.custom_domain, project?.id])
@@ -839,88 +853,150 @@ export default function ProjectEditorPage() {
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-medium">
-                                    {dnsInstructions ? 'Configure DNS' : 'Connect Custom Domain'}
+                                    {project?.custom_domain ? 'Domain Settings' : 'Connect Custom Domain'}
                                 </h3>
-                                <button onClick={() => { setIsDomainModalOpen(false); setDnsInstructions(null); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
+                                <button onClick={() => { setIsDomainModalOpen(false); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
-                            {dnsInstructions ? (
+                            {project?.custom_domain ? (
                                 <div className="space-y-4">
-                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-                                        <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
-                                            To finish connecting <strong>{dnsInstructions.domain}</strong>, please add the following CNAME record to your DNS provider:
-                                        </p>
-                                        <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
-                                            <div className="font-medium text-gray-500">Type:</div>
-                                            <div className="font-mono font-bold">CNAME</div>
-
-                                            <div className="font-medium text-gray-500">Name:</div>
-                                            <div className="font-mono font-bold">www</div>
-
-                                            <div className="font-medium text-gray-500">Value:</div>
-                                            <div className="font-mono font-bold select-all bg-white dark:bg-black/20 px-1 rounded">
-                                                {dnsInstructions.target}
+                                    {/* Current Domain Status */}
+                                    <div className="p-4 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-gray-500">Current Domain</span>
+                                            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${domainStatus === 'active' ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400' :
+                                                domainStatus === 'verifying' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400' :
+                                                    'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400'
+                                                }`}>
+                                                {domainStatus === 'active' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+                                                {domainStatus === 'verifying' && <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />}
+                                                {domainStatus === 'active' ? 'Active' : domainStatus === 'verifying' ? 'Verifying' : 'Checking...'}
                                             </div>
                                         </div>
+                                        <div className="font-mono text-lg font-bold">{project.custom_domain}</div>
                                     </div>
-                                    <button
-                                        onClick={() => { setIsDomainModalOpen(false); setDnsInstructions(null); }}
-                                        className="w-full px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
-                                    >
-                                        I've Added the Record
-                                    </button>
-                                </div>
-                            ) : (
-                                <>
-                                    {project?.custom_domain && (
-                                        <div className="mb-6 p-4 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-sm font-medium text-gray-500">Current Domain</span>
-                                                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${domainStatus === 'active' ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400' :
-                                                    domainStatus === 'verifying' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400' :
-                                                        'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400'
-                                                    }`}>
-                                                    {domainStatus === 'active' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
-                                                    {domainStatus === 'verifying' && <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />}
-                                                    {domainStatus === 'active' ? 'Active' : domainStatus === 'verifying' ? 'Verifying' : 'Unknown'}
+
+                                    {/* DNS Instructions */}
+                                    {dnsInstructions && (
+                                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                                            <p className="text-sm text-blue-800 dark:text-blue-200 mb-3 font-medium">
+                                                DNS Configuration
+                                            </p>
+                                            <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
+                                                <div className="font-medium text-gray-500">Type:</div>
+                                                <div className="font-mono font-bold">CNAME</div>
+
+                                                <div className="font-medium text-gray-500">Name:</div>
+                                                <div className="font-mono font-bold">www</div>
+
+                                                <div className="font-medium text-gray-500">Value:</div>
+                                                <div className="font-mono font-bold select-all bg-white dark:bg-black/20 px-2 py-1 rounded text-xs break-all">
+                                                    {dnsInstructions.target}
                                                 </div>
                                             </div>
-                                            <div className="font-mono text-lg font-bold">{project.custom_domain}</div>
                                             {domainStatus === 'verifying' && (
-                                                <p className="text-xs text-gray-500 mt-2">
-                                                    We are verifying your DNS settings. This can take up to 24 hours.
+                                                <p className="text-xs text-blue-600 dark:text-blue-300 mt-3">
+                                                    ⏳ DNS verification can take up to 24 hours. Make sure your CNAME record is correctly configured.
                                                 </p>
                                             )}
                                         </div>
                                     )}
-                                    <p className="text-sm text-gray-500 mb-4">
-                                        Enter your custom domain (e.g., www.example.com). You will need to configure your DNS settings separately.
-                                    </p>
-                                    <input
-                                        type="text"
-                                        value={customDomain}
-                                        onChange={(e) => setCustomDomain(e.target.value)}
-                                        placeholder="www.yourdomain.com"
-                                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 mb-4 outline-none focus:border-indigo-500"
-                                    />
-                                    <div className="flex justify-end gap-2">
-                                        <button
-                                            onClick={() => setIsDomainModalOpen(false)}
-                                            className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleConnectDomain}
-                                            disabled={isConnectingDomain || !customDomain}
-                                            className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white rounded-lg flex items-center gap-2"
-                                        >
-                                            {isConnectingDomain && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                            Connect
-                                        </button>
-                                    </div>
+
+                                    {/* Remove Domain Button */}
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('Are you sure you want to remove this custom domain? Your site will go back to using the Netlify subdomain.')) return;
+                                            setIsRemovingDomain(true);
+                                            const result = await removeProjectDomain(project.id);
+                                            setIsRemovingDomain(false);
+                                            if (result.success) {
+                                                setProject((prev: any) => ({ ...prev, custom_domain: null, deployment_url: result.newUrl }));
+                                                setCustomDomain('');
+                                                setDnsInstructions(null);
+                                            } else {
+                                                alert(result.error || 'Failed to remove domain');
+                                            }
+                                        }}
+                                        disabled={isRemovingDomain}
+                                        className="w-full px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        {isRemovingDomain ? (
+                                            <div className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                        ) : (
+                                            <Trash2 className="w-4 h-4" />
+                                        )}
+                                        Remove Domain
+                                    </button>
+
+                                    {/* Close Button */}
+                                    <button
+                                        onClick={() => setIsDomainModalOpen(false)}
+                                        className="w-full px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                                    >
+                                        Done
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* New Domain Input - only shown when no custom domain */}
+                                    {dnsInstructions ? (
+                                        <div className="space-y-4">
+                                            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                                                <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                                                    To finish connecting <strong>{dnsInstructions.domain}</strong>, please add the following CNAME record to your DNS provider:
+                                                </p>
+                                                <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
+                                                    <div className="font-medium text-gray-500">Type:</div>
+                                                    <div className="font-mono font-bold">CNAME</div>
+
+                                                    <div className="font-medium text-gray-500">Name:</div>
+                                                    <div className="font-mono font-bold">www</div>
+
+                                                    <div className="font-medium text-gray-500">Value:</div>
+                                                    <div className="font-mono font-bold select-all bg-white dark:bg-black/20 px-1 rounded">
+                                                        {dnsInstructions.target}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => { setIsDomainModalOpen(false); setDnsInstructions(null); }}
+                                                className="w-full px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                                            >
+                                                I've Added the Record
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p className="text-sm text-gray-500 mb-4">
+                                                Enter your custom domain (e.g., www.example.com). You will need to configure your DNS settings separately.
+                                            </p>
+                                            <input
+                                                type="text"
+                                                value={customDomain}
+                                                onChange={(e) => setCustomDomain(e.target.value)}
+                                                placeholder="www.yourdomain.com"
+                                                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 mb-4 outline-none focus:border-indigo-500"
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => setIsDomainModalOpen(false)}
+                                                    className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleConnectDomain}
+                                                    disabled={isConnectingDomain || !customDomain}
+                                                    className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white rounded-lg flex items-center gap-2"
+                                                >
+                                                    {isConnectingDomain && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                                                    Connect
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </>
                             )}
                         </motion.div>

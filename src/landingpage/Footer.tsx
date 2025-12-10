@@ -17,6 +17,12 @@ export const Footer = () => {
             <p className="text-gray-400 text-sm leading-relaxed mb-8">
               The AI-powered frontend engineer for modern teams.
             </p>
+            <div className="flex flex-col gap-2 text-sm">
+              <span className="text-gray-500">Need help?</span>
+              <a href="mailto:support@cleansitebuilder.com" className="text-white hover:text-indigo-400 transition-colors font-medium">
+                support@cleansitebuilder.com
+              </a>
+            </div>
           </div>
 
           <div>

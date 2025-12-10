@@ -8,7 +8,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
   ChevronRight,
-  Crown,
   Folder,
   Layout,
   Loader2,
@@ -17,8 +16,7 @@ import {
   Plus,
   Search,
   Settings, Trash2, User,
-  X,
-  Zap
+  X
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -37,6 +35,7 @@ export default function BuilderPage() {
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [subscription, setSubscription] = useState<{ status: string; plan: string | null; generationCount: number; generationLimit: number } | null>(null)
+  const [activeJobs, setActiveJobs] = useState<any[]>([])
   const router = useRouter()
   const supabase = createClient()
 
@@ -59,8 +58,9 @@ export default function BuilderPage() {
           .single()
 
         if (profile) {
-          const plan = profile.subscription_plan || 'Free'
-          const limit = plan === 'Pro' ? 250 : plan === 'Starter' ? 100 : 5
+          const planName = (profile.subscription_plan || '').toLowerCase()
+          // Match PLAN_LIMITS from subscription.ts
+          const limit = planName.includes('pro') ? 250 : planName.includes('starter') ? 100 : 2
           setSubscription({
             status: profile.subscription_status || 'free',
             plan: profile.subscription_plan,
@@ -73,6 +73,53 @@ export default function BuilderPage() {
     }
     checkUser()
   }, [router, supabase])
+
+  // Subscribe to active generation jobs
+  useEffect(() => {
+    if (!user) return
+
+    const fetchActiveJobs = async () => {
+      // Get all project IDs for this user
+      const { data: projectIds } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', user.id)
+
+      if (!projectIds?.length) return
+
+      // Get active jobs for these projects
+      const { data: jobs } = await supabase
+        .from('generation_jobs')
+        .select('*, projects(name)')
+        .in('project_id', projectIds.map((p: any) => p.id))
+        .in('status', ['pending', 'processing'])
+        .order('created_at', { ascending: false })
+
+      setActiveJobs(jobs || [])
+    }
+
+    fetchActiveJobs()
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel('generation-jobs-dashboard')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'generation_jobs',
+        },
+        () => {
+          fetchActiveJobs()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, supabase])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -128,253 +175,347 @@ export default function BuilderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#030712] flex text-gray-900 dark:text-white transition-colors duration-300">
-      {/* Compact Sidebar */}
-      <div
-        className={`${isSidebarCollapsed ? 'w-20' : 'w-64'
-          } border-r border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 z-20 relative hidden md:flex`}
-      >
-        {/* Toggle Button */}
-        <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-indigo-600 dark:hover:text-white transition-colors shadow-sm z-30"
-        >
-          <ChevronRight className={`w-3 h-3 transition-transform duration-300 ${!isSidebarCollapsed ? 'rotate-180' : ''}`} />
-        </button>
+    <div className="h-screen bg-[#f2f3f5] dark:bg-[#050505] p-3 md:p-4 flex gap-3 md:gap-4 text-gray-900 dark:text-white transition-colors duration-300 overflow-hidden font-sans selection:bg-indigo-500/30">
 
-        <div className={`h-16 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'px-6'} border-b border-gray-200 dark:border-white/10 transition-all duration-300`}>
-          <div className="flex items-center gap-3">
-            <Image src="/icon/project-initiation (1).png" alt="Logo" width={24} height={24} className="w-6 h-6 shrink-0" />
-            <span className={`font-bold text-lg tracking-tight transition-opacity duration-300 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>Builder</span>
+      {/* Background Ambient Glow */}
+      <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-500/10 blur-[120px] rounded-full pointer-events-none" />
+
+      {/* Unique Floating Sidebar */}
+      <aside
+        className={`${isSidebarCollapsed ? 'w-20' : 'w-[280px]'} h-full bg-white/80 dark:bg-[#121212]/80 backdrop-blur-2xl border border-white/50 dark:border-white/5 rounded-[32px] shadow-2xl shadow-gray-200/50 dark:shadow-black/50 flex flex-col transition-all duration-500 z-20 relative hidden md:flex overflow-hidden group/sidebar`}
+      >
+        {/* Decorative Top Gradient */}
+        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
+
+        {/* Header */}
+        <div className={`h-24 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'px-8'} transition-all duration-500 shrink-0`}>
+          <div className="flex items-center gap-4 group/logo cursor-pointer">
+            <Image src="/icon/project-initiation (1).png" alt="Logo" width={40} height={40} className="w-10 h-10 shrink-0" />
+            <div className={`transition-all duration-500 ${isSidebarCollapsed ? 'opacity-0 w-0 translate-x-[-20px] hidden' : 'opacity-100 translate-x-0'}`}>
+              <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">CleanSite</span>
+              <span className="text-[10px] font-medium text-indigo-500 uppercase tracking-widest block mt-0.5">Builder Studio</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 py-4 space-y-1 px-3">
-          <div className="mb-6">
+        {/* Toggle Button (Floating on Edge) */}
+        <button
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className={`absolute -right-0.5 top-9 w-6 h-6 bg-white dark:bg-[#121212] border border-gray-200 dark:border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-indigo-600 dark:hover:text-white shadow-md z-50 transition-all duration-300 opacity-0 group-hover/sidebar:opacity-100 scale-90 group-hover/sidebar:scale-100`}
+        >
+          <ChevronRight className={`w-3 h-3 transition-transform duration-500 ${!isSidebarCollapsed ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* Main Navigation */}
+        <div className="flex-1 px-4 py-2 space-y-8 overflow-y-auto scrollbar-hide">
+
+          {/* Create Button */}
+          <div className="relative group/create">
             <button
               onClick={() => setIsModalOpen(true)}
-              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'gap-2 px-3'} py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all shadow-sm shadow-indigo-500/20 text-sm font-medium overflow-hidden`}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center h-12' : 'gap-3 px-4 h-14'} bg-gray-900 dark:bg-white text-white dark:text-black rounded-2xl transition-all duration-300 shadow-xl shadow-gray-900/10 dark:shadow-black/50 hover:shadow-gray-900/20 dark:hover:shadow-white/20 hover:scale-[1.02] active:scale-[0.98] z-10 relative overflow-hidden`}
             >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span className={`transition-all duration-300 ${isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>New Project</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-200%] group-hover/create:translate-x-[200%] transition-transform duration-1000" />
+              <Plus className="w-5 h-5 shrink-0" />
+              <span className={`font-semibold tracking-wide transition-all duration-300 ${isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>Create New</span>
             </button>
           </div>
 
-          <NavItem icon={<Layout className="w-4 h-4" />} label="Dashboard" active collapsed={isSidebarCollapsed} />
-          <NavItem icon={<Folder className="w-4 h-4" />} label="Projects" collapsed={isSidebarCollapsed} />
-          <NavItem icon={<User className="w-4 h-4" />} label="Team" collapsed={isSidebarCollapsed} />
-          <NavItem icon={<Settings className="w-4 h-4" />} label="Settings" collapsed={isSidebarCollapsed} />
+          {/* Menu Groups */}
+          <div className="space-y-2">
+            {!isSidebarCollapsed && (
+              <div className="px-4 mb-3 flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+                <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Workspace</span>
+              </div>
+            )}
+            <SidebarLink icon={<Layout className="w-5 h-5" />} label="Dashboard" active collapsed={isSidebarCollapsed} />
+            <SidebarLink icon={<Folder className="w-5 h-5" />} label="All Projects" collapsed={isSidebarCollapsed} />
+            <SidebarLink icon={<User className="w-5 h-5" />} label="Team Members" collapsed={isSidebarCollapsed} />
+          </div>
+
+          <div className="space-y-2">
+            {!isSidebarCollapsed && (
+              <div className="px-4 mb-3 flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+                <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Configuration</span>
+              </div>
+            )}
+            <SidebarLink icon={<Settings className="w-5 h-5" />} label="Settings" collapsed={isSidebarCollapsed} />
+          </div>
         </div>
 
-        <div className="p-3 border-t border-gray-200 dark:border-white/10">
-          <div className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors cursor-pointer group ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0">
-              {user?.email?.[0].toUpperCase()}
-            </div>
-            <div className={`flex-1 overflow-hidden transition-all duration-300 ${isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
-              <div className="text-xs font-medium truncate">{user?.email}</div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                {subscription?.status === 'active' ? (
-                  <>
-                    {subscription.plan === 'Pro' ? <Crown className="w-3 h-3 text-purple-400" /> : <Zap className="w-3 h-3 text-blue-400" />}
-                    {subscription.plan} Plan
-                  </>
-                ) : (
-                  'Free Plan'
+        {/* Bottom Section */}
+        <div className="p-4 mt-auto space-y-4">
+          {/* Usage Card (Glass) */}
+          {!isSidebarCollapsed && subscription && (
+            <div className="p-5 rounded-[24px] bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111] border border-gray-100 dark:border-white/5 shadow-lg relative overflow-hidden group/card">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 blur-2xl rounded-full -mr-10 -mt-10 transition-transform duration-700 group-hover/card:scale-150" />
+
+              <div className="flex items-center justify-between mb-3 relative z-10">
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Plan Usage</span>
+                <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide ${subscription.plan === 'Pro'
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30'
+                  : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-300'
+                  }`}>
+                  {subscription.status === 'active' ? subscription.plan : 'Free'}
+                </span>
+              </div>
+
+              <div className="space-y-3 relative z-10">
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">{subscription.generationCount}</span>
+                  <span className="text-xs font-medium text-gray-400 mb-1">/ {subscription.generationLimit} gens</span>
+                </div>
+                <div className="h-2 bg-gray-100 dark:bg-black rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${Math.min(100, (subscription.generationCount / subscription.generationLimit) * 100)}%` }}
+                  />
+                </div>
+                {subscription.status !== 'active' && (
+                  <Link href="/pricing" className="block w-full py-2 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-colors">
+                    Upgrade to Pro →
+                  </Link>
                 )}
               </div>
             </div>
-            <LogOut
+          )}
+
+          {/* User Profile (Floating Pill) */}
+          <div className={`flex items-center gap-3 p-2 rounded-[20px] bg-gray-100/50 dark:bg-white/5 border border-transparent hover:border-gray-200 dark:hover:border-white/10 hover:bg-white dark:hover:bg-white/10 transition-all cursor-pointer group/user ${isSidebarCollapsed ? 'justify-center aspect-square p-0' : ''}`}>
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-gray-200 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center text-gray-700 dark:text-gray-300 font-bold text-sm shadow-inner">
+                {user?.email?.[0].toUpperCase()}
+              </div>
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-[2.5px] border-white dark:border-[#121212]" />
+            </div>
+
+            <div className={`flex-1 overflow-hidden transition-all duration-300 ${isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
+              <div className="text-sm font-bold text-gray-900 dark:text-white truncate">{user?.email?.split('@')[0]}</div>
+              <div className="text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate">{user?.email}</div>
+            </div>
+
+            <button
               onClick={handleSignOut}
-              className={`w-4 h-4 text-gray-400 hover:text-red-500 transition-colors shrink-0 ${isSidebarCollapsed ? 'hidden' : 'block'}`}
-            />
+              className={`w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all shrink-0 ${isSidebarCollapsed ? 'hidden' : 'block'}`}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
+      {/* Main Content Area - Floating Card */}
+      <main className="flex-1 h-full bg-white dark:bg-[#0a0a0a] rounded-[32px] border border-white/50 dark:border-white/5 shadow-xl shadow-gray-200/20 dark:shadow-black/20 overflow-hidden relative flex flex-col">
         {/* Header */}
-        <header className="h-16 border-b border-gray-200 dark:border-white/10 bg-white/50 dark:bg-[#0a0a0a]/50 backdrop-blur-xl flex items-center justify-between px-6 z-10">
-          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-            <span className="hover:text-gray-900 dark:hover:text-white cursor-pointer transition-colors">Home</span>
-            <ChevronRight className="w-4 h-4" />
-            <span className="text-gray-900 dark:text-white font-medium">Dashboard</span>
+        <header className="h-20 border-b border-gray-100 dark:border-white/5 flex items-center justify-between px-8 bg-white/50 dark:bg-[#0a0a0a]/50 backdrop-blur-xl z-10 sticky top-0">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-400">
+              <span className="hover:text-gray-900 dark:hover:text-white cursor-pointer transition-colors">Home</span>
+              <ChevronRight className="w-3 h-3" />
+              <span className="text-gray-900 dark:text-white bg-gray-100 dark:bg-white/10 px-2 py-1 rounded-md">Dashboard</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="flex items-center gap-6">
+            <div className="relative hidden md:block group/search">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within/search:text-indigo-500 transition-colors" />
               <input
                 type="text"
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64 bg-gray-100 dark:bg-white/5 border border-transparent focus:border-indigo-500 rounded-lg pl-9 pr-4 py-1.5 text-sm outline-none transition-all"
+                className="w-72 bg-gray-50 dark:bg-[#111] border-none rounded-2xl pl-11 pr-4 py-2.5 text-sm outline-none ring-1 ring-transparent focus:ring-indigo-500/20 focus:bg-white dark:focus:bg-[#151515] transition-all shadow-inner"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <span className="text-[10px] bg-gray-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-gray-500">⌘K</span>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-50">
+                <span className="text-[10px] font-bold bg-gray-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-gray-500">⌘K</span>
               </div>
             </div>
 
-            <div className="h-4 w-px bg-gray-200 dark:bg-white/10 mx-2" />
+            <div className="h-6 w-px bg-gray-200 dark:bg-white/10" />
 
             <ThemeToggle />
 
-            {/* Subscription Badge */}
-            {subscription?.status === 'active' ? (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20">
-                {subscription.plan === 'Pro' ? <Crown className="w-4 h-4 text-purple-400" /> : <Zap className="w-4 h-4 text-blue-400" />}
-                <span className="text-xs font-medium text-purple-400">{subscription.plan}</span>
-                <span className="text-[10px] text-gray-400">{subscription.generationCount}/{subscription.generationLimit}</span>
-              </div>
-            ) : (
-              <Link
-                href="/pricing"
-                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium hover:opacity-90 transition-opacity"
-              >
-                <Zap className="w-3 h-3" />
-                Upgrade
-              </Link>
-            )}
-
-            <button className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition-colors relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full border-2 border-white dark:border-[#0a0a0a]" />
+            <button className="relative w-10 h-10 flex items-center justify-center rounded-2xl bg-gray-50 dark:bg-[#111] hover:bg-indigo-50 dark:hover:bg-indigo-500/10 text-gray-500 hover:text-indigo-500 transition-all group/bell">
+              <Bell className="w-5 h-5 group-hover/bell:rotate-12 transition-transform" />
+              <span className="absolute top-3 right-3 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-[#111]" />
             </button>
           </div>
         </header>
 
-        {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 relative">
-          {/* Background Grid */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-8 relative scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-white/10">
+          {/* Subtle Grid Background */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
 
           <div className="max-w-7xl mx-auto relative z-10">
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-end justify-between mb-10">
               <div>
-                <h1 className="text-2xl font-bold mb-1">Welcome back, {user?.user_metadata?.first_name || 'Builder'}</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Here's what's happening with your projects today.</p>
+                <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">
+                  Welcome back, {user?.user_metadata?.first_name || 'Builder'}
+                </h1>
+                <p className="text-gray-500 dark:text-gray-400 font-medium">Here's what's happening with your projects today.</p>
               </div>
-              <div className="flex gap-2">
-                <select className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+              <div className="flex gap-3">
+                <select className="bg-white dark:bg-[#111] border-none ring-1 ring-gray-200 dark:ring-white/10 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:ring-indigo-500 transition-all shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5">
                   <option>Last 7 days</option>
                   <option>Last 30 days</option>
                 </select>
               </div>
             </div>
 
-            {/* Projects Grid */}
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Recent Projects</h2>
-              <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">View all</button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {/* Create New Card */}
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setIsModalOpen(true)}
-                className="group relative aspect-[4/3] rounded-xl border-2 border-dashed border-gray-300 dark:border-white/10 hover:border-indigo-500 dark:hover:border-indigo-500/50 bg-gray-50 dark:bg-white/5 flex flex-col items-center justify-center cursor-pointer transition-colors"
-              >
-                <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                  <Plus className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            {/* Active Generation Jobs */}
+            {activeJobs.length > 0 && (
+              <div className="mb-10 p-6 rounded-[24px] bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20">
+                <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  </div>
+                  Active Generations
+                </h2>
+                <div className="grid gap-4">
+                  {activeJobs.map((job) => (
+                    <div key={job.id} className="bg-white dark:bg-[#151515] p-5 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-bold text-gray-900 dark:text-white">{job.projects?.name || 'Untitled Project'}</h3>
+                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider">
+                            {job.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 h-2 bg-gray-100 dark:bg-black rounded-full overflow-hidden max-w-md">
+                            <div
+                              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 relative overflow-hidden"
+                              style={{ width: `${job.progress}%` }}
+                            >
+                              <div className="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite]" />
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold text-gray-500">{job.progress}%</span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-2 font-medium flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                          {job.current_step || 'Initializing...'}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/builder/${job.project_id}`}
+                        className="px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold rounded-xl hover:scale-105 transition-transform shadow-lg shadow-gray-900/10 dark:shadow-white/10"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  ))}
                 </div>
-                <span className="font-medium text-sm">Create New Project</span>
-              </motion.div>
+              </div>
+            )}
 
-              {/* Project Cards */}
-              {projects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  id={project.id}
-                  title={project.name}
-                  lastEdited={new Date(project.updated_at).toLocaleDateString()}
-                  status={project.status}
-                  deploymentUrl={project.deployment_url}
-                  customDomain={project.custom_domain}
-                  codeContent={project.code_content}
-                  onDelete={() => openDeleteModal(project.id)}
-                />
-              ))}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Folder className="w-5 h-5 text-gray-400" />
+                Recent Projects
+              </h2>
             </div>
-          </div>
-        </main>
-      </div>
 
-      {/* Create Project Modal */}
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-64 bg-gray-100 dark:bg-white/5 rounded-[24px] animate-pulse" />
+                ))}
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="text-center py-20 bg-white dark:bg-[#111] rounded-[32px] border border-dashed border-gray-200 dark:border-white/10">
+                <div className="w-20 h-20 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Folder className="w-10 h-10 text-gray-300 dark:text-gray-600" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">No projects yet</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">Create your first project to get started building amazing websites with AI.</p>
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1"
+                >
+                  Create Project
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10">
+                {projects
+                  .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      id={project.id}
+                      title={project.name}
+                      lastEdited={new Date(project.updated_at).toLocaleDateString()}
+                      status={project.status}
+                      deploymentUrl={project.deployment_url}
+                      customDomain={project.custom_domain}
+                      codeContent={project.code_content}
+                      onDelete={() => openDeleteModal(project.id)}
+                    />
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* Modals */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
               onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-md bg-white dark:bg-[#111] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-[#151515] rounded-[32px] shadow-2xl overflow-hidden"
             >
-              <div className="p-6">
+              <div className="p-8">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold">Create New Project</h3>
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
+                  <h2 className="text-2xl font-bold">Create New Project</h2>
+                  <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-full transition-colors">
+                    <X className="w-5 h-5 text-gray-500" />
                   </button>
                 </div>
 
-                <form onSubmit={handleCreateProject} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Project Name</label>
-                    <input
-                      name="name"
-                      type="text"
-                      required
-                      placeholder="My Awesome Website"
-                      className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2.5 outline-none focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
+                <form onSubmit={handleCreateProject}>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        Project Name
+                      </label>
+                      <input
+                        name="name"
+                        type="text"
+                        required
+                        placeholder="e.g., My Awesome Portfolio"
+                        className="w-full px-5 py-3 bg-gray-50 dark:bg-[#0a0a0a] border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Description (Optional)</label>
-                    <textarea
-                      name="description"
-                      rows={3}
-                      placeholder="A brief description of your project..."
-                      className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2.5 outline-none focus:border-indigo-500 transition-colors resize-none"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isCreating}
-                      className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isCreating ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Creating...
-                        </>
-                      ) : (
-                        'Create Project'
-                      )}
-                    </button>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="px-6 py-3 text-sm font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isCreating}
+                        className="px-8 py-3 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-500/30 transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+                      >
+                        {isCreating ? 'Creating...' : 'Create Project'}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -383,46 +524,39 @@ export default function BuilderPage() {
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {isDeleteModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => setIsDeleteModalOpen(false)}
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm bg-white dark:bg-[#111] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden p-6"
+              className="relative w-full max-w-sm bg-white dark:bg-[#151515] rounded-[32px] shadow-2xl p-8 text-center"
             >
-              <div className="flex flex-col items-center text-center mb-6">
-                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/10 flex items-center justify-center mb-4 text-red-600 dark:text-red-500">
-                  <Trash2 className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Delete Project?</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Are you sure you want to delete this project? This action cannot be undone and all data will be lost.
-                </p>
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Trash2 className="w-8 h-8 text-red-500" />
               </div>
-
+              <h3 className="text-xl font-bold mb-2">Delete Project?</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-8">
+                This action cannot be undone. All data associated with this project will be permanently removed.
+              </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                  className="flex-1 py-3 font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={confirmDelete}
                   disabled={isDeleting}
-                  className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 py-3 font-bold bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-lg shadow-red-500/30 transition-all"
                 >
-                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete'}
+                  {isDeleting ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </motion.div>
@@ -433,18 +567,25 @@ export default function BuilderPage() {
   )
 }
 
-function NavItem({ icon, label, active = false, collapsed = false }: { icon: React.ReactNode, label: string, active?: boolean, collapsed?: boolean }) {
+function SidebarLink({ icon, label, active = false, collapsed = false }: { icon: React.ReactNode, label: string, active?: boolean, collapsed?: boolean }) {
   return (
-    <div className={`flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-lg cursor-pointer transition-all ${active
-      ? 'bg-gray-100 dark:bg-white/10 text-indigo-600 dark:text-white font-medium'
-      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+    <div className={`group flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-xl cursor-pointer transition-all ${active
+      ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold'
+      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white font-medium'
       }`}>
-      {icon}
+      <div className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
+        {icon}
+      </div>
       <span className={`text-sm transition-all duration-300 ${collapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'}`}>{label}</span>
-      {active && !collapsed && <div className="ml-auto w-1 h-1 rounded-full bg-indigo-600" />}
+      {active && !collapsed && (
+        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shadow-[0_0_8px_rgba(79,70,229,0.5)]" />
+      )}
     </div>
   )
 }
+
+// Backward compatibility if needed, though we replaced usages
+const NavItem = SidebarLink;
 
 function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomain, codeContent, onDelete }: {
   id: string,

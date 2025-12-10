@@ -20,16 +20,16 @@ const plans = [
         // TODO: Replace with your actual Polar product ID from Polar dashboard
         productId: process.env.NEXT_PUBLIC_POLAR_STARTER_PRODUCT_ID || 'YOUR_STARTER_PRODUCT_ID',
         features: [
-            { text: '100 website generations/month', included: true },
+            { text: '150 website generations/month', included: true },
             { text: 'Multi-page websites (up to 10 pages)', included: true },
             { text: 'Custom domain for 5 websites', included: true },
             { text: 'One-click Netlify deployment', included: true },
             { text: 'Quick edit mode', included: true },
             { text: 'Export HTML/CSS files', included: true },
+            { text: 'No branding', included: true },
             { text: 'Email support', included: true },
             { text: 'Parallel generation', included: false },
             { text: 'Unlimited custom domains', included: false },
-            { text: 'API access', included: false },
         ],
     },
     {
@@ -43,14 +43,13 @@ const plans = [
         // TODO: Replace with your actual Polar product ID from Polar dashboard
         productId: process.env.NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID || 'YOUR_PRO_PRODUCT_ID',
         features: [
-            { text: '250 website generations/month', included: true },
+            { text: '300 website generations/month', included: true },
             { text: 'Unlimited pages per website', included: true },
             { text: 'Unlimited custom domains', included: true },
             { text: 'One-click Netlify deployment', included: true },
             { text: 'Parallel generation (multiple at once)', included: true },
             { text: 'Priority AI processing', included: true },
             { text: 'Export & white-label', included: true },
-            { text: 'API access for automation', included: true },
             { text: 'Priority support', included: true },
             { text: 'No branding', included: true },
         ],
@@ -216,7 +215,7 @@ export default function PricingPage() {
                     <p className="text-gray-400">
                         🆓 Want to try first?{' '}
                         <Link href="/signup" className="text-purple-400 hover:text-purple-300 underline">
-                            Start with 5 free generations
+                            Start with 2 free generations
                         </Link>
                         {' '}— no credit card required.
                     </p>
