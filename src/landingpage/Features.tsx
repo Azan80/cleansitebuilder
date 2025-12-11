@@ -1,8 +1,5 @@
-"use client";
-
-import React from "react";
-import { motion } from "framer-motion";
-import { Sparkles, Code, Globe, Zap, Layout, Lock } from "lucide-react";
+import { FadeIn } from "@/components/animations/FadeIn";
+import { Code, Globe, Layout, Sparkles, Zap } from "lucide-react";
 
 const features = [
   {
@@ -50,18 +47,14 @@ export const Features = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {features.map((feature, index) => (
-            <motion.div
+            <FadeIn
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
-              className={`p-8 rounded-3xl bg-white/5 border border-white/10 hover:border-white/20 transition-all group relative overflow-hidden ${
-                feature.colSpan === 2 ? "md:col-span-2" : feature.colSpan === 3 ? "md:col-span-3" : "md:col-span-1"
-              }`}
+              delay={index * 0.1}
+              className={`p-8 rounded-3xl bg-white/5 border border-white/10 hover:border-white/20 transition-all group relative overflow-hidden ${feature.colSpan === 2 ? "md:col-span-2" : feature.colSpan === 3 ? "md:col-span-3" : "md:col-span-1"
+                }`}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-              
+
               <div className="w-12 h-12 rounded-2xl bg-[#111] border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform relative z-10 shadow-lg">
                 <div className="absolute inset-0 bg-white/5 rounded-2xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
                 {feature.icon}
@@ -70,7 +63,7 @@ export const Features = () => {
               <p className="text-gray-400 leading-relaxed relative z-10">
                 {feature.description}
               </p>
-            </motion.div>
+            </FadeIn>
           ))}
         </div>
       </div>

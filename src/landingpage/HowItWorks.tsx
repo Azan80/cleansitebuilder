@@ -1,8 +1,6 @@
-"use client";
-
-import React from "react";
-import { motion } from "framer-motion";
-import { MessageSquare, Code2, Rocket, ArrowRight } from "lucide-react";
+import { ConnectingLine } from "@/components/animations/ConnectingLine";
+import { FadeIn } from "@/components/animations/FadeIn";
+import { Code2, MessageSquare, Rocket } from "lucide-react";
 
 const steps = [
   {
@@ -36,14 +34,11 @@ export const HowItWorks = () => {
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="text-center mb-24">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+          <FadeIn
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-gray-400 text-xs font-mono mb-6"
           >
             <span>WORKFLOW_V2.0</span>
-          </motion.div>
+          </FadeIn>
           <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 tracking-tight">From prompt to production.</h2>
           <p className="text-gray-400 max-w-2xl mx-auto text-lg">
             A streamlined, industrial-grade workflow designed for speed and precision.
@@ -52,24 +47,13 @@ export const HowItWorks = () => {
 
         <div className="relative max-w-5xl mx-auto">
           {/* Connecting Line (Desktop) */}
-          <div className="hidden md:block absolute top-12 left-0 right-0 h-px bg-white/10">
-            <motion.div 
-              initial={{ scaleX: 0, originX: 0 }}
-              whileInView={{ scaleX: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 1.5, ease: "easeInOut" }}
-              className="h-full bg-white/30"
-            />
-          </div>
+          <ConnectingLine />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             {steps.map((step, index) => (
-              <motion.div
+              <FadeIn
                 key={index}
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.3 }}
+                delay={index * 0.3}
                 className="relative group"
               >
                 {/* Step Number & Icon */}
@@ -78,7 +62,7 @@ export const HowItWorks = () => {
                     <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     {/* Animated Border Beam */}
                     <div className="absolute inset-0 overflow-hidden rounded-2xl">
-                       <div className="absolute top-0 left-0 w-full h-full border-2 border-white/0 group-hover:border-white/10 transition-all duration-500" />
+                      <div className="absolute top-0 left-0 w-full h-full border-2 border-white/0 group-hover:border-white/10 transition-all duration-500" />
                     </div>
                     <div className="text-white group-hover:scale-110 transition-transform duration-500">
                       {step.icon}
@@ -87,7 +71,7 @@ export const HowItWorks = () => {
                       {step.id}
                     </div>
                   </div>
-                  
+
                   {/* Vertical Line for Mobile */}
                   <div className="md:hidden h-12 w-px bg-white/10 my-4" />
                 </div>
@@ -98,14 +82,14 @@ export const HowItWorks = () => {
                   <p className="text-gray-400 leading-relaxed text-sm">
                     {step.description}
                   </p>
-                  
+
                   {/* Corner Accents */}
                   <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-white/10" />
                   <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-white/10" />
                   <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-white/10" />
                   <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-white/10" />
                 </div>
-              </motion.div>
+              </FadeIn>
             ))}
           </div>
         </div>

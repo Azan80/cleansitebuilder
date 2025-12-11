@@ -1,48 +1,11 @@
-"use client";
-
-import { createClient } from "@/utils/supabase/client";
-import { motion } from "framer-motion";
+import { FadeIn } from "@/components/animations/FadeIn";
 import { Check, Sparkles } from "lucide-react";
-import React from "react";
 
-const plans = [
-  {
-    name: "Hacker",
-    price: "0",
-    description: "For hobbyists and experiments.",
-    features: ["5 AI Generations/day", "Public Projects", "Community Support"],
-    highlight: false,
-  },
-  {
-    name: "Pro",
-    price: "29",
-    description: "For shipping real products.",
-    features: ["Unlimited Generations", "Custom Domains", "Private Repos", "Export Code"],
-    highlight: true,
-  },
-  {
-    name: "Team",
-    price: "99",
-    description: "For agencies and startups.",
-    features: ["Everything in Pro", "Team Seats", "Priority Support", "White Labeling"],
-    highlight: false,
-  },
-];
+interface PricingProps {
+  userEmail?: string | null;
+}
 
-export const Pricing = () => {
-  const [userEmail, setUserEmail] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const fetchUser = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email) {
-        setUserEmail(user.email);
-      }
-    };
-    fetchUser();
-  }, []);
-
+export const Pricing = ({ userEmail }: PricingProps) => {
   const getCheckoutUrl = (productId: string) => {
     let url = `/api/checkout?products=${productId}`;
     if (userEmail) {
@@ -56,12 +19,13 @@ export const Pricing = () => {
       name: 'Starter',
       price: 10,
       description: 'Perfect for individuals and small projects',
-      popular: false,
+      popular: true,
       productId: process.env.NEXT_PUBLIC_POLAR_STARTER_PRODUCT_ID || 'YOUR_STARTER_PRODUCT_ID',
       features: [
-        { text: '150 website generations/month', included: true },
+        { text: '250 premium credits/month', included: true },
         { text: 'Multi-page websites (up to 10 pages)', included: true },
         { text: 'Custom domain for 5 websites', included: true },
+        { text: 'deepseek-reasoner DeepSeek-V3.2 with thinking mode', included: true },
         { text: 'One-click Netlify deployment', included: true },
         { text: 'Quick edit mode', included: true },
         { text: 'Export HTML/CSS files', included: true },
@@ -73,12 +37,13 @@ export const Pricing = () => {
       name: 'Pro',
       price: 20,
       description: 'For power users and agencies',
-      popular: true,
+      popular: false,
       productId: process.env.NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID || 'YOUR_PRO_PRODUCT_ID',
       features: [
-        { text: '300 website generations/month', included: true },
+        { text: '500 premium credits/month', included: true },
         { text: 'Unlimited pages per website', included: true },
         { text: 'Unlimited custom domains', included: true },
+        { text: 'deepseek-reasoner DeepSeek-V3.2 with thinking mode', included: true },
         { text: 'One-click Netlify deployment', included: true },
         { text: 'Parallel generation (multiple at once)', included: true },
         { text: 'Priority AI processing', included: true },
@@ -99,12 +64,9 @@ export const Pricing = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {plans.map((plan, index) => (
-            <motion.div
+            <FadeIn
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
+              delay={index * 0.1}
               className={`relative p-8 rounded-3xl border transition-all duration-300 ${plan.popular
                 ? "bg-white/5 border-purple-500/50 shadow-2xl shadow-purple-500/10"
                 : "bg-transparent border-white/10 hover:border-white/20"
@@ -112,7 +74,7 @@ export const Pricing = () => {
             >
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold uppercase tracking-wide rounded-full flex items-center gap-1 shadow-lg shadow-purple-500/30">
-                  <Sparkles className="w-3 h-3" /> Most Popular
+                  <Sparkles className="w-3 h-3" /> Best Value
                 </div>
               )}
 
@@ -141,7 +103,7 @@ export const Pricing = () => {
               >
                 Get Started
               </a>
-            </motion.div>
+            </FadeIn>
           ))}
         </div>
 
