@@ -1,10 +1,11 @@
-import { Navbar } from "@/landingpage/Navbar";
-import { Hero } from "@/landingpage/Hero";
 import { Features } from "@/landingpage/Features";
-import { HowItWorks } from "@/landingpage/HowItWorks";
-import { Showcase } from "@/landingpage/Showcase";
-import { Pricing } from "@/landingpage/Pricing";
 import { Footer } from "@/landingpage/Footer";
+import { Hero } from "@/landingpage/Hero";
+import { HowItWorks } from "@/landingpage/HowItWorks";
+import { Navbar } from "@/landingpage/Navbar";
+import { Pricing } from "@/landingpage/Pricing";
+import { Showcase } from "@/landingpage/Showcase";
+import { TrustedBy } from "@/landingpage/TrustedBy";
 import { Sparkles } from "lucide-react";
 
 export default function Home() {
@@ -12,16 +13,17 @@ export default function Home() {
     <main className="min-h-screen bg-[#030712] selection:bg-indigo-500 selection:text-white">
       <Navbar />
       <Hero />
+      <TrustedBy />
       <Features />
       <HowItWorks />
       <Showcase />
       <Pricing />
-      
+
       {/* Final CTA */}
       <section className="py-32 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#030712] to-indigo-950/20" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-[100px] pointer-events-none" />
-        
+
         <div className="container mx-auto px-6 relative z-10 text-center">
           <h2 className="text-5xl md:text-7xl font-bold mb-8 tracking-tight text-white">
             Ready to ship?
@@ -35,7 +37,7 @@ export default function Home() {
           </button>
         </div>
       </section>
-      
+
       <Footer />
     </main>
   );
