@@ -1,3 +1,4 @@
+import { Comparison } from "@/landingpage/Comparison";
 import { Features } from "@/landingpage/Features";
 import { Footer } from "@/landingpage/Footer";
 import { Hero } from "@/landingpage/Hero";
@@ -6,9 +7,14 @@ import { Navbar } from "@/landingpage/Navbar";
 import { Pricing } from "@/landingpage/Pricing";
 import { Showcase } from "@/landingpage/Showcase";
 import { TrustedBy } from "@/landingpage/TrustedBy";
+import { createClient } from "@/utils/supabase/server";
 import { Sparkles } from "lucide-react";
+import Link from "next/link";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <main className="min-h-screen bg-[#030712] selection:bg-indigo-500 selection:text-white">
       <Navbar />
@@ -17,7 +23,8 @@ export default function Home() {
       <Features />
       <HowItWorks />
       <Showcase />
-      <Pricing />
+      <Comparison />
+      <Pricing userEmail={user?.email || null} />
 
       {/* Final CTA */}
       <section className="py-32 relative overflow-hidden">
@@ -31,10 +38,10 @@ export default function Home() {
           <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto">
             Join the new standard of web development. Build your dream site in seconds.
           </p>
-          <button className="px-10 py-5 bg-white text-black rounded-2xl font-bold text-xl hover:bg-gray-200 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)] hover:-translate-y-1 flex items-center gap-3 mx-auto">
+          <Link href="/builder" className="px-10 py-5 bg-white text-black rounded-2xl font-bold text-xl hover:bg-gray-200 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)] hover:-translate-y-1 flex items-center gap-3 mx-auto inline-flex">
             <Sparkles className="w-6 h-6" />
             Start Building Now
-          </button>
+          </Link>
         </div>
       </section>
 

@@ -58,7 +58,7 @@ export const Navbar = () => {
 
             {/* Desktop Menu */}
             <div className={`hidden md:flex items-center gap-1 transition-all duration-500 ${!isScrolled && "bg-[#111]/50 border border-white/5 rounded-full p-1 backdrop-blur-md"}`}>
-              {["Features", "Showcase"].map((item) => (
+              {["Features"].map((item) => (
                 <Link
                   key={item}
                   href={`#${item.toLowerCase()}`}
@@ -92,7 +92,7 @@ export const Navbar = () => {
                   >
                     Log in
                   </Link>
-                  <Link href="/signup" className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)]">
+                  <Link href="/builder" className="px-5 py-2.5 bg-white text-black text-sm font-bold rounded-full hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5)]">
                     Start Building
                   </Link>
                 </>
@@ -120,7 +120,7 @@ export const Navbar = () => {
             className="fixed top-24 left-4 right-4 bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-3xl z-40 md:hidden overflow-hidden shadow-2xl p-4"
           >
             <div className="flex flex-col gap-2">
-              {["Features", "Showcase"].map((item) => (
+              {["Features"].map((item) => (
                 <Link
                   key={item}
                   href={`#${item.toLowerCase()}`}
@@ -154,7 +154,7 @@ export const Navbar = () => {
                   >
                     Log in
                   </Link>
-                  <Link href="/signup" className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors text-center block">
+                  <Link href="/builder" className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors text-center block">
                     Start Building
                   </Link>
                 </>

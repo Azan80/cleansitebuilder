@@ -8,14 +8,14 @@ export const PLAN_LIMITS = {
     priorityProcessing: false,
   },
   starter: {
-    generationsPerMonth: 150,
+    generationsPerMonth: 250,
     maxCustomDomains: 5,
     maxPagesPerSite: 10,
     parallelGeneration: false,
     priorityProcessing: false,
   },
   pro: {
-    generationsPerMonth: 300,
+    generationsPerMonth: 500,
     maxCustomDomains: Infinity, // Unlimited
     maxPagesPerSite: Infinity, // Unlimited
     parallelGeneration: true,

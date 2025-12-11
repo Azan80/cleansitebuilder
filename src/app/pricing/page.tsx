@@ -16,13 +16,14 @@ const plans = [
         icon: Zap,
         color: 'from-blue-500 to-cyan-500',
         shadowColor: 'shadow-blue-500/20',
-        popular: false,
+        popular: true,
         // TODO: Replace with your actual Polar product ID from Polar dashboard
         productId: process.env.NEXT_PUBLIC_POLAR_STARTER_PRODUCT_ID || 'YOUR_STARTER_PRODUCT_ID',
         features: [
-            { text: '150 website generations/month', included: true },
+            { text: '250 premium credits/month', included: true },
             { text: 'Multi-page websites (up to 10 pages)', included: true },
             { text: 'Custom domain for 5 websites', included: true },
+            { text: 'deepseek-reasoner DeepSeek-V3.2 with thinking mode', included: true },
             { text: 'One-click Netlify deployment', included: true },
             { text: 'Quick edit mode', included: true },
             { text: 'Export HTML/CSS files', included: true },
@@ -39,13 +40,14 @@ const plans = [
         icon: Crown,
         color: 'from-purple-500 to-pink-500',
         shadowColor: 'shadow-purple-500/20',
-        popular: true,
+        popular: false,
         // TODO: Replace with your actual Polar product ID from Polar dashboard
         productId: process.env.NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID || 'YOUR_PRO_PRODUCT_ID',
         features: [
-            { text: '300 website generations/month', included: true },
+            { text: '500 premium credits/month', included: true },
             { text: 'Unlimited pages per website', included: true },
             { text: 'Unlimited custom domains', included: true },
+            { text: 'deepseek-reasoner DeepSeek-V3.2 with thinking mode', included: true },
             { text: 'One-click Netlify deployment', included: true },
             { text: 'Parallel generation (multiple at once)', included: true },
             { text: 'Priority AI processing', included: true },
@@ -130,7 +132,7 @@ export default function PricingPage() {
                                 {plan.popular && (
                                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
                                         <span className="px-4 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-full shadow-lg shadow-purple-500/30">
-                                            Most Popular
+                                            Best Value
                                         </span>
                                     </div>
                                 )}
