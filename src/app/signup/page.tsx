@@ -17,6 +17,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [savedPrompt, setSavedPrompt] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
@@ -28,6 +29,13 @@ export default function SignupPage() {
       }
     }
     checkUser()
+
+    // Capture prompt from URL if present
+    const params = new URLSearchParams(window.location.search)
+    const prompt = params.get('prompt')
+    if (prompt) {
+      setSavedPrompt(prompt)
+    }
   }, [router, supabase])
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -41,7 +49,11 @@ export default function SignupPage() {
       return
     }
 
-    const { error } = await supabase.auth.signUp({
+    // Properly encode the redirect URL with prompt
+    const loginUrl = `/login?verified=true${savedPrompt ? `&prompt=${encodeURIComponent(savedPrompt)}` : ''}`
+    const redirectUrl = `${location.origin}/auth/callback?next=${encodeURIComponent(loginUrl)}`
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -49,7 +61,7 @@ export default function SignupPage() {
           first_name: firstName,
           last_name: lastName,
         },
-        emailRedirectTo: `${location.origin}/auth/callback?next=/login?verified=true`,
+        emailRedirectTo: redirectUrl,
       },
     })
 
@@ -111,6 +123,22 @@ export default function SignupPage() {
         </div>
 
         <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
+          {savedPrompt && (
+            <div className="mb-6 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                  <Mail className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-indigo-300 mb-1">Your project is waiting!</p>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    After signup, we'll create: <span className="text-white font-medium">"{savedPrompt}"</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSignup} className="space-y-4">
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
@@ -218,10 +246,15 @@ export default function SignupPage() {
           <button
             onClick={async () => {
               setLoading(true)
+              // Preserve prompt through OAuth flow
+              const nextUrl = savedPrompt
+                ? `/login?prompt=${encodeURIComponent(savedPrompt)}`
+                : '/builder'
+
               const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                  redirectTo: `${location.origin}/auth/callback?next=/builder`,
+                  redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(nextUrl)}`,
                 },
               })
               if (error) {
@@ -255,7 +288,10 @@ export default function SignupPage() {
 
           <p className="mt-6 text-center text-sm text-gray-400">
             Already have an account?{' '}
-            <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+            <Link
+              href={savedPrompt ? `/login?prompt=${encodeURIComponent(savedPrompt)}` : '/login'}
+              className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+            >
               Sign in
             </Link>
           </p>

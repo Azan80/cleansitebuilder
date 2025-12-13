@@ -1,3 +1,4 @@
+import { AutoCreateProjectHandler } from "@/components/AutoCreateProjectHandler";
 import { Comparison } from "@/landingpage/Comparison";
 import { Features } from "@/landingpage/Features";
 import { Footer } from "@/landingpage/Footer";
@@ -10,6 +11,7 @@ import { TrustedBy } from "@/landingpage/TrustedBy";
 import { createClient } from "@/utils/supabase/server";
 import { Sparkles } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -17,6 +19,9 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-[#030712] selection:bg-indigo-500 selection:text-white">
+      <Suspense fallback={null}>
+        <AutoCreateProjectHandler />
+      </Suspense>
       <Navbar />
       <Hero />
       <TrustedBy />
