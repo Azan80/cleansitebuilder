@@ -36,6 +36,7 @@ export default function BuilderPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [subscription, setSubscription] = useState<{ status: string; plan: string | null; generationCount: number; generationLimit: number } | null>(null)
   const [activeJobs, setActiveJobs] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<'projects' | 'jobs'>('projects')
   const router = useRouter()
   const supabase = createClient()
 
@@ -368,97 +369,168 @@ export default function BuilderPage() {
               </div>
             </div>
 
-            {/* Active Generation Jobs */}
-            {activeJobs.length > 0 && (
-              <div className="mb-10 p-6 rounded-[24px] bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20">
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  </div>
-                  Active Generations
-                </h2>
-                <div className="grid gap-4">
-                  {activeJobs.map((job) => (
-                    <div key={job.id} className="bg-white dark:bg-[#151515] p-5 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-bold text-gray-900 dark:text-white">{job.projects?.name || 'Untitled Project'}</h3>
-                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider">
-                            {job.status}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1 h-2 bg-gray-100 dark:bg-black rounded-full overflow-hidden max-w-md">
-                            <div
-                              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 relative overflow-hidden"
-                              style={{ width: `${job.progress}%` }}
-                            >
-                              <div className="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite]" />
-                            </div>
-                          </div>
-                          <span className="text-xs font-bold text-gray-500">{job.progress}%</span>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-2 font-medium flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                          {job.current_step || 'Initializing...'}
-                        </p>
-                      </div>
-                      <Link
-                        href={`/builder/${job.project_id}`}
-                        className="px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold rounded-xl hover:scale-105 transition-transform shadow-lg shadow-gray-900/10 dark:shadow-white/10"
-                      >
-                        View
-                      </Link>
-                    </div>
-                  ))}
+            {/* Tabs */}
+            <div className="mb-8 flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-1.5 rounded-2xl w-fit">
+              <button
+                onClick={() => setActiveTab('projects')}
+                className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'projects'
+                  ? 'bg-white dark:bg-[#111] text-gray-900 dark:text-white shadow-md'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Folder className="w-4 h-4" />
+                  All Projects
+                  <span className="px-2 py-0.5 rounded-full bg-gray-200 dark:bg-white/10 text-[10px] font-bold">
+                    {projects.length}
+                  </span>
                 </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Folder className="w-5 h-5 text-gray-400" />
-                Recent Projects
-              </h2>
+              </button>
+              <button
+                onClick={() => setActiveTab('jobs')}
+                className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'jobs'
+                  ? 'bg-white dark:bg-[#111] text-gray-900 dark:text-white shadow-md'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Loader2 className={`w-4 h-4 ${activeJobs.length > 0 ? 'animate-spin' : ''}`} />
+                  Active Jobs
+                  {activeJobs.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500 text-white text-[10px] font-bold animate-pulse">
+                      {activeJobs.length}
+                    </span>
+                  )}
+                </div>
+              </button>
             </div>
 
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-64 bg-gray-100 dark:bg-white/5 rounded-[24px] animate-pulse" />
-                ))}
-              </div>
-            ) : projects.length === 0 ? (
-              <div className="text-center py-20 bg-white dark:bg-[#111] rounded-[32px] border border-dashed border-gray-200 dark:border-white/10">
-                <div className="w-20 h-20 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Folder className="w-10 h-10 text-gray-300 dark:text-gray-600" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">No projects yet</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">Create your first project to get started building amazing websites with AI.</p>
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1"
-                >
-                  Create Project
-                </button>
+            {/* Tab Content */}
+            {activeTab === 'jobs' ? (
+              // Active Jobs Tab
+              <div>
+                {activeJobs.length === 0 ? (
+                  <div className="text-center py-20 bg-white dark:bg-[#111] rounded-[32px] border border-dashed border-gray-200 dark:border-white/10">
+                    <div className="w-20 h-20 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Loader2 className="w-10 h-10 text-gray-300 dark:text-gray-600" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">No active jobs</h3>
+                    <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">
+                      All your generation jobs are complete. Create a new project or regenerate an existing one to see active jobs here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 pb-10">
+                    {activeJobs.map((job) => (
+                      <div key={job.id} className="bg-white dark:bg-[#111] p-6 rounded-[24px] border border-gray-100 dark:border-white/10 shadow-sm hover:shadow-md transition-all">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                <Loader2 className="w-6 h-6 animate-spin text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">
+                                  {job.projects?.name || 'Untitled Project'}
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                                    {job.status}
+                                  </span>
+                                  <span className="text-xs text-gray-400 font-medium flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                    {job.current_step || 'Initializing...'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-4">
+                                <div className="flex-1 h-3 bg-gray-100 dark:bg-black rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 relative overflow-hidden"
+                                    style={{ width: `${job.progress}%` }}
+                                  >
+                                    <div className="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite]" />
+                                  </div>
+                                </div>
+                                <span className="text-sm font-bold text-gray-900 dark:text-white min-w-[3rem] text-right">
+                                  {job.progress}%
+                                </span>
+                              </div>
+
+                              {job.error && (
+                                <div className="mt-2 p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl">
+                                  <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                                    {job.error}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <Link
+                            href={`/builder/${job.project_id}`}
+                            className="px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold rounded-xl hover:scale-105 transition-transform shadow-lg shadow-gray-900/10 dark:shadow-white/10"
+                          >
+                            View
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10">
-                {projects
-                  .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((project) => (
-                    <ProjectCard
-                      key={project.id}
-                      id={project.id}
-                      title={project.name}
-                      lastEdited={new Date(project.updated_at).toLocaleDateString()}
-                      status={project.status}
-                      deploymentUrl={project.deployment_url}
-                      customDomain={project.custom_domain}
-                      codeContent={project.code_content}
-                      onDelete={() => openDeleteModal(project.id)}
-                    />
-                  ))}
+              // Projects Tab
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Folder className="w-5 h-5 text-gray-400" />
+                    Recent Projects
+                  </h2>
+                </div>
+
+                {loading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-64 bg-gray-100 dark:bg-white/5 rounded-[24px] animate-pulse" />
+                    ))}
+                  </div>
+                ) : projects.length === 0 ? (
+                  <div className="text-center py-20 bg-white dark:bg-[#111] rounded-[32px] border border-dashed border-gray-200 dark:border-white/10">
+                    <div className="w-20 h-20 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Folder className="w-10 h-10 text-gray-300 dark:text-gray-600" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">No projects yet</h3>
+                    <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">Create your first project to get started building amazing websites with AI.</p>
+                    <button
+                      onClick={() => setIsModalOpen(true)}
+                      className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1"
+                    >
+                      Create Project
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10">
+                    {projects
+                      .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map((project) => (
+                        <ProjectCard
+                          key={project.id}
+                          id={project.id}
+                          title={project.name}
+                          lastEdited={new Date(project.updated_at).toLocaleDateString()}
+                          status={project.status}
+                          deploymentUrl={project.deployment_url}
+                          customDomain={project.custom_domain}
+                          codeContent={project.code_content}
+                          onDelete={() => openDeleteModal(project.id)}
+                        />
+                      ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -620,8 +692,46 @@ function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomai
     if (!codeContent) return null
     try {
       const files = JSON.parse(codeContent)
-      return files['index.html'] || null
-    } catch {
+      let html = files['index.html'] || null
+
+      if (!html) return null
+
+      // Inject CSS to hide error messages and improve rendering
+      const styleInjection = `
+        <style>
+          /* Hide all error messages and console outputs */
+          body { 
+            overflow: hidden !important; 
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          /* Hide common error elements */
+          [class*="error"], 
+          [id*="error"],
+          .console,
+          #console {
+            display: none !important;
+          }
+          /* Ensure content fits */
+          * {
+            max-width: 100%;
+            box-sizing: border-box;
+          }
+        </style>
+      `
+
+      // Insert style before closing head tag or at the beginning if no head
+      if (html.includes('</head>')) {
+        html = html.replace('</head>', `${styleInjection}</head>`)
+      } else if (html.includes('<head>')) {
+        html = html.replace('<head>', `<head>${styleInjection}`)
+      } else {
+        html = styleInjection + html
+      }
+
+      return html
+    } catch (error) {
+      console.error('Error parsing preview HTML:', error)
       return null
     }
   })()
@@ -635,13 +745,17 @@ function ProjectCard({ id, title, lastEdited, status, deploymentUrl, customDomai
       {/* Website Preview Thumbnail Link */}
       <Link href={`/builder/${id}`} className="block h-1/2 bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 relative overflow-hidden shrink-0 cursor-pointer">
         {previewHtml ? (
-          <div className="absolute inset-0 origin-top-left" style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}>
+          <div className="absolute inset-0 origin-top-left bg-white" style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}>
             <iframe
               srcDoc={previewHtml}
               className="w-full h-full border-0 pointer-events-none"
               title={`Preview of ${title}`}
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-scripts"
               loading="lazy"
+              style={{
+                background: 'white',
+                colorScheme: 'light'
+              }}
             />
           </div>
         ) : (
