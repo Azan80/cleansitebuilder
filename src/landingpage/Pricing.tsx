@@ -111,7 +111,7 @@ export const Pricing = ({ userEmail }: PricingProps) => {
           <p className="text-gray-400">
             🆓 Want to try first?{' '}
             <a href="/signup" className="text-purple-400 hover:text-purple-300 underline">
-              Start with 2 free generations
+              Start with 5 free generations
             </a>
             {' '}— no credit card required.
           </p>

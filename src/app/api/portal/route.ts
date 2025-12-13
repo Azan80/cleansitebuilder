@@ -20,5 +20,5 @@ export const GET = CustomerPortal({
 
     return profile?.polar_customer_id || "";
   },
-  server: "sandbox", // Change to "production" when going live
+  server: "production", // Change to "production" when going live
 });

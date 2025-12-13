@@ -217,7 +217,7 @@ export default function PricingPage() {
                     <p className="text-gray-400">
                         🆓 Want to try first?{' '}
                         <Link href="/signup" className="text-purple-400 hover:text-purple-300 underline">
-                            Start with 2 free generations
+                            Start with 5 free generations
                         </Link>
                         {' '}— no credit card required.
                     </p>

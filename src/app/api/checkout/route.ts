@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 const checkoutHandler = Checkout({
   accessToken: process.env.POLAR_ACCESS_TOKEN!,
   successUrl: (process.env.NEXT_PUBLIC_APP_URL || "https://cleansitebuilder.com") + "/builder",
-  server: "sandbox", // Change to "production" when going live
+  server: "production", // Change to "production" when going live
 });
 
 export async function GET(request: NextRequest) {

@@ -1,7 +1,7 @@
 // Subscription plans and their limits
 export const PLAN_LIMITS = {
   free: {
-    generationsPerMonth: 2,
+    generationsPerMonth: 5,
     maxCustomDomains: 0,
     maxPagesPerSite: 3,
     parallelGeneration: false,
