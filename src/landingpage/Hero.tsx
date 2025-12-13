@@ -1,7 +1,6 @@
 import { FadeIn } from "@/components/animations/FadeIn";
 import { HeroDemo } from "@/landingpage/HeroDemo";
-import { ArrowRight } from "lucide-react";
-import Link from "next/link";
+import { HeroPromptInput } from "@/landingpage/HeroPromptInput";
 import { FaBootstrap, FaCss3Alt, FaHtml5 } from "react-icons/fa";
 import { SiTailwindcss } from "react-icons/si";
 
@@ -31,11 +30,7 @@ export const Hero = () => {
                </FadeIn>
 
                <FadeIn delay={0.3}>
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                     <Link href="/builder" className="px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center gap-2">
-                        Start Building <ArrowRight className="w-4 h-4" />
-                     </Link>
-                  </div>
+                  <HeroPromptInput />
                </FadeIn>
 
                <FadeIn delay={0.5}>

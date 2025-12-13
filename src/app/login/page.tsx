@@ -18,13 +18,19 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectUrl = searchParams.get('redirect') || '/builder'
+  const promptFromUrl = searchParams.get('prompt')
   const supabase = createClient()
 
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        router.push(redirectUrl)
+        // If user is already logged in and there's a prompt, create project
+        if (promptFromUrl) {
+          await handlePromptRedirect(user.id, promptFromUrl)
+        } else {
+          router.push(redirectUrl)
+        }
       }
     }
     checkUser()
@@ -34,14 +40,42 @@ function LoginForm() {
       // Optional: Clean up URL
       // router.replace('/login') 
     }
-  }, [router, supabase, redirectUrl, searchParams])
+  }, [router, supabase, redirectUrl, searchParams, promptFromUrl])
+
+  const handlePromptRedirect = async (userId: string, prompt: string) => {
+    try {
+      // Generate project name with AI
+      const { generateProjectName } = await import('@/app/actions/project-name-generator')
+      const projectName = await generateProjectName(prompt)
+
+      // Create project
+      const { data: project, error } = await supabase
+        .from('projects')
+        .insert({
+          user_id: userId,
+          name: projectName,
+          description: prompt,
+        })
+        .select()
+        .single()
+
+      if (!error && project) {
+        router.push(`/builder/${project.id}`)
+      } else {
+        router.push(redirectUrl)
+      }
+    } catch (err) {
+      console.error('Error creating project from prompt:', err)
+      router.push(redirectUrl)
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -54,17 +88,26 @@ function LoginForm() {
       }
       setLoading(false)
     } else {
-      router.push(redirectUrl)
+      // If there's a prompt, create project and redirect
+      if (promptFromUrl && data.user) {
+        await handlePromptRedirect(data.user.id, promptFromUrl)
+      } else {
+        router.push(redirectUrl)
+      }
       router.refresh()
     }
   }
 
   const handleGoogleLogin = async () => {
     setLoading(true)
+    const nextUrl = promptFromUrl
+      ? `${redirectUrl}?prompt=${encodeURIComponent(promptFromUrl)}`
+      : redirectUrl
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(redirectUrl)}`,
+        redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(nextUrl)}`,
       },
     })
 
@@ -95,6 +138,22 @@ function LoginForm() {
         </div>
 
         <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
+          {promptFromUrl && (
+            <div className="mb-6 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                  <Lock className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-indigo-300 mb-1">Your project is ready!</p>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    After login, we'll create: <span className="text-white font-medium">"{promptFromUrl}"</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
@@ -184,7 +243,10 @@ function LoginForm() {
 
           <p className="mt-6 text-center text-sm text-gray-400">
             Don't have an account?{' '}
-            <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+            <Link
+              href={promptFromUrl ? `/signup?prompt=${encodeURIComponent(promptFromUrl)}` : '/signup'}
+              className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+            >
               Create account
             </Link>
           </p>

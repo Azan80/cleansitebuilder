@@ -8,13 +8,37 @@ export async function middleware(request: NextRequest) {
   // Protected routes
   if (request.nextUrl.pathname.startsWith('/builder')) {
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      // Preserve the full URL including query params for redirect back after login
+      const redirectUrl = new URL('/login', request.url)
+      redirectUrl.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search)
+      return NextResponse.redirect(redirectUrl)
+    }
+    
+    // Check if user is on /builder (list page) with a prompt parameter
+    // This happens after OAuth login - redirect to home to trigger project creation
+    if (request.nextUrl.pathname === '/builder') {
+      const prompt = request.nextUrl.searchParams.get('prompt')
+      if (prompt) {
+        const redirectUrl = new URL('/', request.url)
+        redirectUrl.searchParams.set('auto_create', 'true')
+        redirectUrl.searchParams.set('prompt', prompt)
+        return NextResponse.redirect(redirectUrl)
+      }
     }
   }
 
   // Auth routes (redirect to builder if already logged in)
   if (['/login', '/signup'].includes(request.nextUrl.pathname)) {
     if (user) {
+      // Check if there's a prompt parameter
+      const prompt = request.nextUrl.searchParams.get('prompt')
+      if (prompt) {
+        // Redirect to root with prompt, let client-side handle project creation
+        const redirectUrl = new URL('/', request.url)
+        redirectUrl.searchParams.set('auto_create', 'true')
+        redirectUrl.searchParams.set('prompt', prompt)
+        return NextResponse.redirect(redirectUrl)
+      }
       return NextResponse.redirect(new URL('/builder', request.url))
     }
   }

@@ -3,6 +3,7 @@
 import { deployToNetlify, getDomainStatus, removeProjectDomain, updateProjectDomain } from '@/app/actions/deploy-actions'
 import { getProjectFiles } from '@/app/actions/download-actions'
 import { getProjectById } from '@/app/actions/project-actions'
+import { GeneratingPreview } from '@/components/GeneratingPreview'
 import { SandpackPreview } from '@/components/SandpackPreview'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { saveAs } from 'file-saver'
@@ -58,6 +59,7 @@ export default function ProjectEditorPage() {
     const [totalTasks, setTotalTasks] = useState(0)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [activeJobId, setActiveJobId] = useState<string | null>(null)
+    const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false)
 
     useEffect(() => {
         const fetchProject = async () => {
@@ -79,6 +81,45 @@ export default function ProjectEditorPage() {
                         setMessages(history.map(m => ({ role: m.role as 'user' | 'ai', content: m.content })))
                     } else {
                         setMessages([{ role: 'ai', content: 'Hello! I\'m your AI web builder. Describe the website you want to create, and I\'ll build it for you instantly.' }])
+
+                        // Check if this is a new project with an initial prompt from the landing page
+                        if (data.description && !data.code_content && !hasAutoSubmitted) {
+                            setHasAutoSubmitted(true)
+                            // Auto-submit the initial prompt
+                            setTimeout(() => {
+                                setPrompt(data.description)
+                                // Trigger generation after a short delay to ensure UI is ready
+                                setTimeout(async () => {
+                                    const userMessage = data.description.trim()
+                                    const newMessages = [
+                                        { role: 'ai' as const, content: 'Hello! I\'m your AI web builder. Describe the website you want to create, and I\'ll build it for you instantly.' },
+                                        { role: 'user' as const, content: userMessage }
+                                    ]
+                                    setMessages(newMessages)
+                                    setPrompt('')
+                                    setIsGenerating(true)
+                                    setReasoning('')
+
+                                    try {
+                                        const { startWebsiteGeneration } = await import('@/app/actions/ai-generation')
+                                        const result = await startWebsiteGeneration(userMessage, data.id, undefined, newMessages)
+
+                                        if (!result.success || !result.jobId) {
+                                            setMessages(prev => [...prev, { role: 'ai', content: `❌ Sorry, something went wrong: ${result.error || 'Unknown error'}. Please try again.` }])
+                                            setIsGenerating(false)
+                                            return
+                                        }
+
+                                        setActiveJobId(result.jobId)
+                                        setMessages(prev => [...prev, { role: 'ai', content: '🚀 Starting generation...' }])
+                                    } catch (error) {
+                                        console.error('Auto-generation error:', error)
+                                        setMessages(prev => [...prev, { role: 'ai', content: '❌ An error occurred. Please try sending your request again.' }])
+                                        setIsGenerating(false)
+                                    }
+                                }, 500)
+                            }, 100)
+                        }
                     }
 
                     // Check for active (running) jobs
@@ -100,7 +141,7 @@ export default function ProjectEditorPage() {
             }
         }
         fetchProject()
-    }, [params.id, router])
+    }, [params.id, router, hasAutoSubmitted])
 
     // Resume polling for active job if page was refreshed
     useEffect(() => {
@@ -771,7 +812,11 @@ export default function ProjectEditorPage() {
 
                             {/* Preview Content (Sandpack) */}
                             <div className="flex-1 bg-white relative group h-full">
-                                <SandpackPreview files={previewFiles} />
+                                {isGenerating && !project?.code_content ? (
+                                    <GeneratingPreview />
+                                ) : (
+                                    <SandpackPreview files={previewFiles} />
+                                )}
                             </div>
                         </motion.div>
                     </div>
@@ -834,7 +879,11 @@ export default function ProjectEditorPage() {
                         </div>
                         <div className="flex-1 bg-gray-100 dark:bg-[#111] p-4 md:p-8 overflow-hidden">
                             <div className="w-full h-full bg-white dark:bg-[#0a0a0a] rounded-lg shadow-2xl overflow-hidden border border-gray-200 dark:border-white/10">
-                                <SandpackPreview files={previewFiles} />
+                                {isGenerating && !project?.code_content ? (
+                                    <GeneratingPreview />
+                                ) : (
+                                    <SandpackPreview files={previewFiles} />
+                                )}
                             </div>
                         </div>
                     </motion.div>
