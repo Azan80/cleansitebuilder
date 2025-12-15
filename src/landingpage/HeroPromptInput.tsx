@@ -60,39 +60,44 @@ export const HeroPromptInput = () => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto">
+        <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto px-4">
             <div className="relative group">
                 {/* Glow effect */}
                 <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl opacity-30 blur-xl group-hover:opacity-50 transition-opacity duration-500" />
 
-                {/* Input container */}
-                <div className="relative bg-[#0a0a0a] border border-white/10 rounded-2xl p-3 flex items-center gap-3 shadow-2xl">
-                    <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-indigo-500/10 shrink-0">
+                {/* Input container - responsive layout */}
+                <div className="relative bg-[#0a0a0a] border border-white/10 rounded-2xl p-2 md:p-3 flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3 shadow-2xl">
+                    {/* Icon - hidden on mobile, visible on md+ */}
+                    <div className="hidden md:flex items-center justify-center w-14 h-14 rounded-xl bg-indigo-500/10 shrink-0">
                         <Sparkles className="w-6 h-6 text-indigo-400" />
                     </div>
 
+                    {/* Input field */}
                     <input
                         type="text"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="Describe your dream website... (e.g., A modern portfolio with dark mode)"
-                        className="flex-1 bg-transparent text-white placeholder:text-gray-500 outline-none text-lg px-3 py-4"
+                        placeholder="Describe your dream website..."
+                        className="flex-1 bg-transparent text-white placeholder:text-gray-500 outline-none text-base md:text-lg px-3 md:px-3 py-3 md:py-4"
                         disabled={isLoading}
                     />
 
+                    {/* Submit button */}
                     <button
                         type="submit"
                         disabled={!prompt.trim() || isLoading}
-                        className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 disabled:scale-100 disabled:shadow-none"
+                        className="w-full md:w-auto px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 disabled:scale-100 disabled:shadow-none"
                     >
                         {isLoading ? (
                             <>
                                 <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                                Generating...
+                                <span className="hidden sm:inline">Generating...</span>
+                                <span className="sm:hidden">Loading...</span>
                             </>
                         ) : (
                             <>
-                                Generate
+                                <span className="hidden sm:inline">Generate</span>
+                                <span className="sm:hidden">Start</span>
                                 <ArrowRight className="w-5 h-5" />
                             </>
                         )}
