@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { createClient } from '@/utils/supabase/client'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Activity,
   Bell,
   ChevronRight,
   Folder,
@@ -233,8 +234,21 @@ export default function BuilderPage() {
                 <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Workspace</span>
               </div>
             )}
-            <SidebarLink icon={<Layout className="w-5 h-5" />} label="Dashboard" active collapsed={isSidebarCollapsed} />
-            <SidebarLink icon={<Folder className="w-5 h-5" />} label="All Projects" collapsed={isSidebarCollapsed} />
+            <SidebarLink
+              icon={<Layout className="w-5 h-5" />}
+              label="Dashboard"
+              active={activeTab === 'projects'}
+              collapsed={isSidebarCollapsed}
+              onClick={() => setActiveTab('projects')}
+            />
+            <SidebarLink
+              icon={<Activity className="w-5 h-5" />}
+              label="Active Jobs"
+              active={activeTab === 'jobs'}
+              collapsed={isSidebarCollapsed}
+              badge={activeJobs.length > 0 ? activeJobs.length : undefined}
+              onClick={() => setActiveTab('jobs')}
+            />
             <SidebarLink icon={<User className="w-5 h-5" />} label="Team Members" collapsed={isSidebarCollapsed} />
           </div>
 
@@ -367,42 +381,6 @@ export default function BuilderPage() {
                   <option>Last 30 days</option>
                 </select>
               </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="mb-8 flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-1.5 rounded-2xl w-fit">
-              <button
-                onClick={() => setActiveTab('projects')}
-                className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'projects'
-                  ? 'bg-white dark:bg-[#111] text-gray-900 dark:text-white shadow-md'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Folder className="w-4 h-4" />
-                  All Projects
-                  <span className="px-2 py-0.5 rounded-full bg-gray-200 dark:bg-white/10 text-[10px] font-bold">
-                    {projects.length}
-                  </span>
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('jobs')}
-                className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'jobs'
-                  ? 'bg-white dark:bg-[#111] text-gray-900 dark:text-white shadow-md'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Loader2 className={`w-4 h-4 ${activeJobs.length > 0 ? 'animate-spin' : ''}`} />
-                  Active Jobs
-                  {activeJobs.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-indigo-500 text-white text-[10px] font-bold animate-pulse">
-                      {activeJobs.length}
-                    </span>
-                  )}
-                </div>
-              </button>
             </div>
 
             {/* Tab Content */}
@@ -641,17 +619,31 @@ export default function BuilderPage() {
   )
 }
 
-function SidebarLink({ icon, label, active = false, collapsed = false }: { icon: React.ReactNode, label: string, active?: boolean, collapsed?: boolean }) {
+function SidebarLink({ icon, label, active = false, collapsed = false, onClick, badge }: {
+  icon: React.ReactNode,
+  label: string,
+  active?: boolean,
+  collapsed?: boolean,
+  onClick?: () => void,
+  badge?: number
+}) {
   return (
-    <div className={`group flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-xl cursor-pointer transition-all ${active
-      ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold'
-      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white font-medium'
-      }`}>
+    <div
+      onClick={onClick}
+      className={`group flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-xl cursor-pointer transition-all ${active
+        ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold'
+        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white font-medium'
+        }`}>
       <div className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
         {icon}
       </div>
       <span className={`text-sm transition-all duration-300 ${collapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'}`}>{label}</span>
-      {active && !collapsed && (
+      {badge !== undefined && badge > 0 && !collapsed && (
+        <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-500 text-white text-[10px] font-bold animate-pulse">
+          {badge}
+        </span>
+      )}
+      {active && !collapsed && !badge && (
         <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shadow-[0_0_8px_rgba(79,70,229,0.5)]" />
       )}
     </div>
