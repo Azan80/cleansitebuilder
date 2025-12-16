@@ -62,7 +62,7 @@ export default function BuilderPage() {
         if (profile) {
           const planName = (profile.subscription_plan || '').toLowerCase()
           // Match PLAN_LIMITS from subscription.ts
-          const limit = planName.includes('pro') ? 250 : planName.includes('starter') ? 100 : 2
+          const limit = planName.includes('pro') ? 500 : planName.includes('starter') ? 250 : 5
           setSubscription({
             status: profile.subscription_status || 'free',
             plan: profile.subscription_plan,
