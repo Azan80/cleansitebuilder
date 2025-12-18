@@ -15,13 +15,11 @@ import {
     Code,
     Download,
     ExternalLink,
-    Globe,
     Maximize2,
     Monitor,
     Rocket,
     RotateCcw,
     Send,
-    Share2,
     Smartphone,
     Sparkles,
     Tablet,
@@ -60,6 +58,7 @@ export default function ProjectEditorPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [activeJobId, setActiveJobId] = useState<string | null>(null)
     const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false)
+    const [activeMobileTab, setActiveMobileTab] = useState<'editor' | 'preview'>('editor')
 
     useEffect(() => {
         const fetchProject = async () => {
@@ -478,8 +477,8 @@ export default function ProjectEditorPage() {
     return (
         <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#030712] text-gray-900 dark:text-white overflow-hidden">
             {/* Header */}
-            <header className="h-14 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] flex items-center justify-between px-4 z-20">
-                <div className="flex items-center gap-4">
+            <header className="h-14 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] flex items-center justify-between px-3 md:px-4 z-20 shrink-0">
+                <div className="flex items-center gap-2 md:gap-4 font-sans">
                     <button
                         onClick={() => router.push('/builder')}
                         className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors text-gray-500"
@@ -487,11 +486,11 @@ export default function ProjectEditorPage() {
                         <ChevronLeft className="w-5 h-5" />
                     </button>
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                        <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg hidden md:flex items-center justify-center">
                             <Image src="/icon/project-initiation (1).png" alt="Logo" width={20} height={20} className="w-5 h-5" />
                         </div>
                         <div>
-                            <h1 className="font-bold text-sm leading-tight">{project?.name}</h1>
+                            <h1 className="font-bold text-sm leading-tight max-w-[120px] md:max-w-none truncate">{project?.name}</h1>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                                 <span className="text-[10px] text-gray-500 font-medium">Draft</span>
@@ -501,7 +500,7 @@ export default function ProjectEditorPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <div className="hidden md:flex items-center bg-gray-100 dark:bg-white/5 rounded-lg p-1 mr-4">
+                    <div className="hidden lg:flex items-center bg-gray-100 dark:bg-white/5 rounded-lg p-1 mr-4">
                         <button
                             onClick={() => setViewport('desktop')}
                             className={`p-1.5 rounded-md transition-all ${viewport === 'desktop' ? 'bg-white dark:bg-[#222] shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
@@ -522,41 +521,21 @@ export default function ProjectEditorPage() {
                         </button>
                     </div>
 
-                    <ThemeToggle />
-                    <button className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 transition-colors">
-                        <Share2 className="w-4 h-4" />
-                    </button>
+                    <div className="hidden sm:block">
+                        <ThemeToggle />
+                    </div>
+
                     <button
                         onClick={handleDownload}
-                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:border-white/10"
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 transition-colors hidden sm:block"
                     >
                         <Download className="w-4 h-4" />
-                        <span className="hidden sm:inline">Download</span>
                     </button>
-                    {project?.deployment_url && (
-                        <a
-                            href={project.deployment_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-green-500/20"
-                        >
-                            <ExternalLink className="w-4 h-4" />
-                            <span className="hidden sm:inline">View Live</span>
-                        </a>
-                    )}
-                    {project?.deployment_url && (
-                        <button
-                            onClick={() => setIsDomainModalOpen(true)}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500"
-                            title="Connect Domain"
-                        >
-                            <Globe className="w-4 h-4" />
-                        </button>
-                    )}
+
                     <button
                         onClick={handleDeploy}
                         disabled={isDeploying}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
+                        className="flex items-center gap-2 px-3 md:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
                     >
                         {isDeploying ? (
                             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -564,14 +543,42 @@ export default function ProjectEditorPage() {
                             <Rocket className="w-4 h-4" />
                         )}
                         <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
+                        <span className="sm:hidden">{isDeploying ? '...' : 'Deploy'}</span>
                     </button>
                 </div>
             </header>
 
+            {/* Mobile Tab Switcher */}
+            <div className="flex md:hidden border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a]">
+                <button
+                    onClick={() => setActiveMobileTab('editor')}
+                    className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeMobileTab === 'editor'
+                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400'
+                        }`}
+                >
+                    AI Editor
+                </button>
+                <button
+                    onClick={() => setActiveMobileTab('preview')}
+                    className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeMobileTab === 'preview'
+                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400'
+                        }`}
+                >
+                    Preview
+                </button>
+            </div>
+
             {/* Main Workspace */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden relative">
                 {/* Left Panel - AI Chat */}
-                <div className="w-[400px] flex flex-col border-r border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] z-10 shadow-xl">
+                <div className={`
+                    w-full md:w-[400px] flex flex-col border-r border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] z-10 shadow-xl
+                    absolute inset-0 md:relative
+                    transition-transform duration-300
+                    ${activeMobileTab === 'editor' ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+                `}>
                     {/* Chat Messages */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-6">
                         {messages.map((msg, idx) => (
@@ -749,7 +756,12 @@ export default function ProjectEditorPage() {
                 </div>
 
                 {/* Right Panel - Preview */}
-                <div className="flex-1 bg-gray-100 dark:bg-[#111] relative flex flex-col">
+                <div className={`
+                    flex-1 bg-gray-100 dark:bg-[#111] relative flex flex-col
+                    absolute inset-0 md:relative
+                    transition-transform duration-300
+                    ${activeMobileTab === 'preview' ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+                `}>
                     {/* Toolbar */}
                     <div className="h-10 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0a0a] flex items-center justify-between px-4">
                         <div className="flex items-center gap-2 text-xs text-gray-500">
