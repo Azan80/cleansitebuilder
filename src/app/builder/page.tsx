@@ -13,6 +13,7 @@ import {
   Layout,
   Loader2,
   LogOut,
+  Menu,
   MoreVertical,
   Plus,
   Search,
@@ -32,6 +33,7 @@ export default function BuilderPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -179,21 +181,42 @@ export default function BuilderPage() {
   }
 
   return (
-    <div className="h-screen bg-[#f2f3f5] dark:bg-[#050505] p-3 md:p-4 flex gap-3 md:gap-4 text-gray-900 dark:text-white transition-colors duration-300 overflow-hidden font-sans selection:bg-indigo-500/30">
+    <div className="h-screen bg-[#f2f3f5] dark:bg-[#050505] p-0 md:p-4 flex gap-0 md:gap-4 text-gray-900 dark:text-white transition-colors duration-300 overflow-hidden font-sans selection:bg-indigo-500/30">
 
       {/* Background Ambient Glow */}
       <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-500/10 blur-[120px] rounded-full pointer-events-none" />
 
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Unique Floating Sidebar */}
       <aside
-        className={`${isSidebarCollapsed ? 'w-20' : 'w-[280px]'} h-full bg-white/80 dark:bg-[#121212]/80 backdrop-blur-2xl border border-white/50 dark:border-white/5 rounded-[32px] shadow-2xl shadow-gray-200/50 dark:shadow-black/50 flex flex-col transition-all duration-500 z-20 relative hidden md:flex overflow-hidden group/sidebar`}
+        className={`
+          fixed inset-y-0 left-0 z-50 md:relative md:z-20
+          ${isMobileMenuOpen ? 'translate-x-0 w-[280px]' : '-translate-x-full md:translate-x-0'}
+          ${isSidebarCollapsed ? 'md:w-20' : 'md:w-[280px]'} 
+          h-full bg-white/95 dark:bg-[#121212]/95 md:bg-white/80 md:dark:bg-[#121212]/80 backdrop-blur-2xl 
+          border-r md:border border-white/50 dark:border-white/5 
+          md:rounded-[32px] shadow-2xl shadow-gray-200/50 dark:shadow-black/50 
+          flex flex-col transition-all duration-500 overflow-hidden group/sidebar
+        `}
       >
         {/* Decorative Top Gradient */}
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
 
         {/* Header */}
-        <div className={`h-24 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'px-8'} transition-all duration-500 shrink-0`}>
+        <div className={`h-24 flex items-center justify-between ${isSidebarCollapsed ? 'justify-center' : 'px-8'} transition-all duration-500 shrink-0`}>
           <div className="flex items-center gap-4 group/logo cursor-pointer">
             <Image src="/icon/project-initiation (1).png" alt="Logo" width={40} height={40} className="w-10 h-10 shrink-0" />
             <div className={`transition-all duration-500 ${isSidebarCollapsed ? 'opacity-0 w-0 translate-x-[-20px] hidden' : 'opacity-100 translate-x-0'}`}>
@@ -201,6 +224,14 @@ export default function BuilderPage() {
               <span className="text-[10px] font-medium text-indigo-500 uppercase tracking-widest block mt-0.5">Builder Studio</span>
             </div>
           </div>
+
+          {/* Mobile Close Button */}
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="md:hidden p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Toggle Button (Floating on Edge) */}
@@ -325,14 +356,22 @@ export default function BuilderPage() {
       </aside>
 
       {/* Main Content Area - Floating Card */}
-      <main className="flex-1 h-full bg-white dark:bg-[#0a0a0a] rounded-[32px] border border-white/50 dark:border-white/5 shadow-xl shadow-gray-200/20 dark:shadow-black/20 overflow-hidden relative flex flex-col">
+      <main className="flex-1 h-full bg-white dark:bg-[#0a0a0a] md:rounded-[32px] border-x md:border border-white/50 dark:border-white/5 shadow-xl shadow-gray-200/20 dark:shadow-black/20 overflow-hidden relative flex flex-col">
         {/* Header */}
-        <header className="h-20 border-b border-gray-100 dark:border-white/5 flex items-center justify-between px-8 bg-white/50 dark:bg-[#0a0a0a]/50 backdrop-blur-xl z-10 sticky top-0">
-          <div className="flex items-center gap-4">
+        <header className="h-16 md:h-20 border-b border-gray-100 dark:border-white/5 flex items-center justify-between px-4 md:px-8 bg-white/50 dark:bg-[#0a0a0a]/50 backdrop-blur-xl z-10 sticky top-0">
+          <div className="flex items-center gap-3 md:gap-4">
+            {/* Mobile Menu Trigger */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
             <div className="flex items-center gap-2 text-sm font-medium text-gray-400">
-              <span className="hover:text-gray-900 dark:hover:text-white cursor-pointer transition-colors">Home</span>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-gray-900 dark:text-white bg-gray-100 dark:bg-white/10 px-2 py-1 rounded-md">Dashboard</span>
+              <span className="hover:text-gray-900 dark:hover:text-white cursor-pointer transition-colors hidden sm:block">Home</span>
+              <ChevronRight className="w-3 h-3 hidden sm:block" />
+              <span className="text-gray-900 dark:text-white bg-gray-100 dark:bg-white/10 px-2 py-1 rounded-md text-xs md:text-sm">Dashboard</span>
             </div>
           </div>
 
