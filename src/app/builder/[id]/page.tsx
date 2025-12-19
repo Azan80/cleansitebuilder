@@ -15,6 +15,7 @@ import {
     Code,
     Download,
     ExternalLink,
+    Globe,
     Maximize2,
     Monitor,
     Rocket,
@@ -45,7 +46,10 @@ export default function ProjectEditorPage() {
     const [isFullScreen, setIsFullScreen] = useState(false)
     const [isDeploying, setIsDeploying] = useState(false)
     const [isDomainModalOpen, setIsDomainModalOpen] = useState(false)
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false)
     const [customDomain, setCustomDomain] = useState('')
+    const [scale, setScale] = useState(1)
+    const previewContainerRef = useRef<HTMLDivElement>(null)
     const [isConnectingDomain, setIsConnectingDomain] = useState(false)
     const [dnsInstructions, setDnsInstructions] = useState<{ domain: string, target: string } | null>(null)
     const [isRemovingDomain, setIsRemovingDomain] = useState(false)
@@ -139,8 +143,46 @@ export default function ProjectEditorPage() {
                 setLoading(false)
             }
         }
+
         fetchProject()
     }, [params.id, router, hasAutoSubmitted])
+
+    // Auto-scale preview
+    useEffect(() => {
+        const calculateScale = () => {
+            if (!previewContainerRef.current) return
+
+            const container = previewContainerRef.current
+            const containerWidth = container.clientWidth - 64 // 32px padding on each side
+            const containerHeight = container.clientHeight - 64
+
+            let targetWidth = 0
+            let targetHeight = 0
+
+            if (viewport === 'mobile') {
+                targetWidth = 375
+                targetHeight = 667
+            } else if (viewport === 'tablet') {
+                targetWidth = 768
+                targetHeight = 1024
+            } else {
+                setScale(1)
+                return
+            }
+
+            const widthScale = containerWidth / targetWidth
+            const heightScale = containerHeight / targetHeight
+
+            // Use the smaller scale factor to ensure it fits both dimensions
+            // But don't scale up past 1
+            const newScale = Math.min(Math.min(widthScale, heightScale), 1)
+            setScale(newScale)
+        }
+
+        calculateScale()
+        window.addEventListener('resize', calculateScale)
+        return () => window.removeEventListener('resize', calculateScale)
+    }, [viewport])
 
     // Resume polling for active job if page was refreshed
     useEffect(() => {
@@ -464,7 +506,12 @@ export default function ProjectEditorPage() {
                 setDnsInstructions({ domain: customDomain, target: result.cnameTarget })
                 // Don't close modal yet, show instructions
             } else {
-                alert('Failed to connect domain: ' + result.error)
+                if (result.error?.includes('Lite plan') || result.error?.includes('Free plan') || result.error?.includes('upgrade')) {
+                    setShowUpgradeModal(true)
+                    setIsDomainModalOpen(false) // Close the input modal
+                } else {
+                    alert('Failed to connect domain: ' + result.error)
+                }
             }
         } catch (error) {
             console.error('Domain connection error:', error)
@@ -524,6 +571,14 @@ export default function ProjectEditorPage() {
                     <div className="hidden sm:block">
                         <ThemeToggle />
                     </div>
+
+                    <button
+                        onClick={() => setIsDomainModalOpen(true)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 transition-colors hidden sm:block"
+                        title="Custom Domain"
+                    >
+                        <Globe className="w-4 h-4" />
+                    </button>
 
                     <button
                         onClick={handleDownload}
@@ -797,12 +852,13 @@ export default function ProjectEditorPage() {
                     </div>
 
                     {/* Preview Canvas */}
-                    <div className="flex-1 overflow-hidden flex items-center justify-center p-8 relative">
+                    <div ref={previewContainerRef} className="flex-1 overflow-hidden flex items-center justify-center p-8 relative">
                         {/* Dotted Background */}
                         <div className="absolute inset-0 bg-[radial-gradient(#80808030_1px,transparent_1px)] [background-size:20px_20px]" />
 
                         <motion.div
                             layout
+                            style={{ transform: viewport !== 'desktop' ? `scale(${scale})` : 'none' }}
                             className={`bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-lg overflow-hidden border border-gray-200 dark:border-white/10 transition-all duration-500 ease-in-out relative z-10 flex flex-col ${viewport === 'mobile' ? 'w-[375px] h-[667px]' :
                                 viewport === 'tablet' ? 'w-[768px] h-[1024px]' :
                                     'w-full h-full'
@@ -1063,6 +1119,45 @@ export default function ProjectEditorPage() {
                                     )}
                                 </>
                             )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {showUpgradeModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                        <div
+                            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                            onClick={() => setShowUpgradeModal(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="relative w-full max-w-sm bg-white dark:bg-[#1e1e1e] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-6 text-center"
+                        >
+                            <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Sparkles className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <h3 className="text-xl font-bold mb-2">Upgrade to Connect Domain</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+                                Custom domains are available on the <strong>Starter</strong> and <strong>Pro</strong> plans. Upgrade now to professionalize your site!
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={() => router.push('/pricing')}
+                                    className="w-full px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20"
+                                >
+                                    Upgrade Now
+                                </button>
+                                <button
+                                    onClick={() => setShowUpgradeModal(false)}
+                                    className="w-full px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
+                                >
+                                    Maybe Later
+                                </button>
+                            </div>
                         </motion.div>
                     </div>
                 )}
