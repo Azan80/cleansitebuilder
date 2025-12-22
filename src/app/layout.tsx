@@ -29,11 +29,6 @@ export const metadata: Metadata = {
     description: "The AI-powered builder that turns your prompts into production-ready UI templates and websites. Deploy instantly to the edge.",
     type: "website",
   },
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
-  },
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
