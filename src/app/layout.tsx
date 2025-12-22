@@ -99,11 +99,11 @@ export default function RootLayout({
             `,
           }}
         />
-        <Script
+        <script
+          async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7370515162038849"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
+        ></script>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
