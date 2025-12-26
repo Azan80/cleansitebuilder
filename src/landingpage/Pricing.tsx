@@ -30,7 +30,6 @@ export const Pricing = ({ userEmail }: PricingProps) => {
         { text: 'Quick edit mode', included: true },
         { text: 'Export HTML/CSS files', included: true },
         { text: 'No branding', included: true },
-        { text: 'Email support', included: true },
       ],
     },
     {
@@ -46,9 +45,7 @@ export const Pricing = ({ userEmail }: PricingProps) => {
         { text: 'deepseek-reasoner DeepSeek-V3.2 with thinking mode', included: true },
         { text: 'One-click Netlify deployment', included: true },
         { text: 'Parallel generation (multiple at once)', included: true },
-        { text: 'Priority AI processing', included: true },
-        { text: 'Export & white-label', included: true },
-        { text: 'Priority support', included: true },
+        { text: 'Export HTML/CSS files', included: true },
         { text: 'No branding', included: true },
       ],
     },
