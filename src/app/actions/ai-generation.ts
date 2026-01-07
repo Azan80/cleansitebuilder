@@ -48,8 +48,8 @@ export async function startWebsiteGeneration(
   // Check if user can generate (subscription limits)
   const canGenerate = await canUserGenerate();
   if (!canGenerate.allowed) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: canGenerate.reason || 'Generation limit reached',
       limitReached: true,
       limits: canGenerate.limits
@@ -64,7 +64,7 @@ export async function startWebsiteGeneration(
   })
 
   const jobId = crypto.randomUUID()
-  
+
   // 2. Create initial job status in DB
   const { error } = await supabase
     .from('generation_jobs')
@@ -114,7 +114,7 @@ async function generateInBackground(
     if (status.tasks) dbUpdates.tasks = status.tasks
     if (status.currentTaskIndex !== undefined) dbUpdates.current_task_index = status.currentTaskIndex
     if (status.totalTasks !== undefined) dbUpdates.total_tasks = status.totalTasks
-    
+
     await supabase
       .from('generation_jobs')
       .update(dbUpdates)
@@ -125,11 +125,11 @@ async function generateInBackground(
     // Parse existing files
     let existingFiles: Record<string, string> = {}
     let isModification = false
-    
+
     if (currentCode) {
       try {
         existingFiles = JSON.parse(currentCode)
-        const hasRealContent = Object.keys(existingFiles).some(key => 
+        const hasRealContent = Object.keys(existingFiles).some(key =>
           key !== '_reasoning' && existingFiles[key] && existingFiles[key].length > 100
         )
         isModification = hasRealContent
@@ -148,20 +148,19 @@ async function generateInBackground(
       }
     }
 
-    // Detect if this is a multi-page request
-    const isMultiPageRequest = detectMultiPageRequest(prompt)
-    
-    if (isMultiPageRequest && !isModification) {
-      // Use multi-step agent workflow for complex new projects
+    // For new websites: always use agent workflow
+    // For modifications: use simple generation
+    if (!isModification) {
+      // Use multi-step agent workflow for all new projects
       await generateWithAgentWorkflow(jobId, prompt, existingFiles, userId, projectId, updateStatus, supabase)
     } else {
-      // Use simple single-step generation for modifications or simple requests
+      // Use simple single-step generation for modifications
       await generateSimple(jobId, prompt, existingFiles, isModification, userId, projectId, updateStatus, supabase, history)
     }
 
   } catch (error: any) {
     console.error('Generation Error:', error)
-    
+
     await supabase.from('messages').insert({
       project_id: projectId,
       role: 'ai',
@@ -185,26 +184,26 @@ function detectQuickEdit(prompt: string): QuickEdit {
   const patterns = [
     // "change website name from ELEVATE to AliCollections" -> captures ELEVATE, AliCollections
     /(?:change|rename|replace)\s+(?:the\s+)?(?:website\s+)?(?:site\s+)?(?:name\s+)?from\s+["']?(\S+)["']?\s+to\s+["']?(\S+)["']?/i,
-    
+
     // "change 'ELEVATE' to 'AliCollections'" -> with quotes
     /(?:change|rename|replace)\s+["']([^"']+)["']\s+(?:to|with)\s+["']([^"']+)["']/i,
-    
+
     // "replace ELEVATE with AliCollections" -> simple replace X with Y
     /replace\s+["']?(\S+)["']?\s+with\s+["']?(\S+)["']?/i,
-    
+
     // "ELEVATE to AliCollections" -> very simple X to Y
     /^["']?(\S+)["']?\s+to\s+["']?(\S+)["']?$/i,
-    
+
     // "rename ELEVATE to AliCollections" -> rename X to Y
     /rename\s+["']?(\S+)["']?\s+to\s+["']?(\S+)["']?/i,
   ]
-  
+
   for (const pattern of patterns) {
     const match = prompt.match(pattern)
     if (match && match[1] && match[2]) {
       const oldText = match[1].trim().replace(/["']/g, '')
       const newText = match[2].trim().replace(/["']/g, '')
-      
+
       // Only use quick edit for short text (likely names, not full paragraphs)
       // And ensure we actually found something meaningful
       if (oldText.length > 0 && oldText.length < 50 && newText.length > 0 && newText.length < 50) {
@@ -213,7 +212,7 @@ function detectQuickEdit(prompt: string): QuickEdit {
       }
     }
   }
-  
+
   return null
 }
 
@@ -243,11 +242,11 @@ async function performQuickEdit(
   // Perform case-insensitive replacement across all files
   for (const [filename, content] of Object.entries(existingFiles)) {
     if (filename === '_reasoning') continue
-    
+
     // Create a regex for case-insensitive replacement but preserve case
     const regex = new RegExp(oldText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
     const matches = content.match(regex)
-    
+
     if (matches && matches.length > 0) {
       // Replace all occurrences
       updatedFiles[filename] = content.replace(regex, newText)
@@ -266,7 +265,7 @@ async function performQuickEdit(
   // Save to database
   await supabase
     .from('projects')
-    .update({ 
+    .update({
       code_content: JSON.stringify(updatedFiles),
       updated_at: new Date().toISOString()
     })
@@ -295,7 +294,7 @@ function detectMultiPageRequest(prompt: string): boolean {
   const lowerPrompt = prompt.toLowerCase()
   const multiPageIndicators = [
     'multi-page', 'multiple pages', 'several pages',
-    'pages:', 'include pages', 
+    'pages:', 'include pages',
     'home, ', 'home page,',
     'about, contact', 'pricing, ',
     'blog, ', 'docs, ', 'documentation',
@@ -337,7 +336,7 @@ Return ONLY the JSON array, nothing else.`
     })
 
     const content = response.choices[0]?.message?.content || ''
-    
+
     // Try to parse JSON array
     const match = content.match(/\[[\s\S]*\]/)
     if (match) {
@@ -361,7 +360,7 @@ Return ONLY the JSON array, nothing else.`
   } catch (error) {
     console.error('Error extracting pages with AI:', error)
   }
-  
+
   // Fallback to keyword matching
   return extractPageNamesFallback(prompt)
 }
@@ -369,14 +368,14 @@ Return ONLY the JSON array, nothing else.`
 // Fallback: Extract page names using keyword matching
 function extractPageNamesFallback(prompt: string): string[] {
   const lowerPrompt = prompt.toLowerCase()
-  
+
   // Try pattern matching first
   const patterns = [
     /pages?:\s*([^.]+)/i,
     /include\s+pages?:\s*([^.]+)/i,
     /with\s+(?:pages?|sections?)(?:\s+like)?:\s*([^.]+)/i,
   ]
-  
+
   for (const pattern of patterns) {
     const match = prompt.match(pattern)
     if (match) {
@@ -386,7 +385,7 @@ function extractPageNamesFallback(prompt: string): string[] {
       }
     }
   }
-  
+
   // Keyword-based detection
   const defaultPages = ['home']
   if (lowerPrompt.includes('about')) defaultPages.push('about')
@@ -399,7 +398,7 @@ function extractPageNamesFallback(prompt: string): string[] {
   if (lowerPrompt.includes('service')) defaultPages.push('services')
   if (lowerPrompt.includes('portfolio')) defaultPages.push('portfolio')
   if (lowerPrompt.includes('doc')) defaultPages.push('docs')
-  
+
   return defaultPages.length > 1 ? defaultPages : ['home']
 }
 
@@ -421,7 +420,7 @@ async function generateWithAgentWorkflow(
   })
 
   const pageNames = await extractPageNamesWithAI(prompt)
-  
+
   // Create task list
   const tasks: GenerationTask[] = [
     { id: 'plan', name: 'Create project plan', type: 'plan', status: 'pending' },
@@ -447,14 +446,14 @@ async function generateWithAgentWorkflow(
   // Step 2: Generate design specification
   tasks[0].status = 'in_progress'
   await updateStatus({ tasks, currentTaskIndex: 0, currentStep: '📋 Creating project plan...' })
-  
+
   const designSpec = await generateDesignSpec(prompt)
-  
+
   tasks[0].status = 'completed'
   tasks[1].status = 'in_progress'
-  await updateStatus({ 
-    tasks, 
-    currentTaskIndex: 1, 
+  await updateStatus({
+    tasks,
+    currentTaskIndex: 1,
     progress: 15,
     currentStep: '🎨 Defining design system...'
   })
@@ -462,7 +461,7 @@ async function generateWithAgentWorkflow(
   // Short delay to show progress
   await new Promise(r => setTimeout(r, 500))
   tasks[1].status = 'completed'
-  
+
   // Step 3: Generate pages in parallel batches
   const generatedFiles: Record<string, string> = {}
   const pageCount = pageNames.length
@@ -470,14 +469,14 @@ async function generateWithAgentWorkflow(
 
   for (let i = 0; i < pageNames.length; i += BATCH_SIZE) {
     const batch = pageNames.slice(i, i + BATCH_SIZE)
-    
+
     // Mark batch as in progress
     batch.forEach((_, idx) => {
       const taskIndex = i + idx + 2
       if (tasks[taskIndex]) tasks[taskIndex].status = 'in_progress'
     })
-    
-    await updateStatus({ 
+
+    await updateStatus({
       tasks,
       currentStep: `📄 Generating pages ${i + 1}-${Math.min(i + BATCH_SIZE, pageCount)} of ${pageCount}...`
     })
@@ -486,17 +485,17 @@ async function generateWithAgentWorkflow(
       const globalIdx = i + batchIdx
       const fileName = pageName === 'home' ? 'index.html' : `${pageName}.html`
       const taskIndex = globalIdx + 2
-      
+
       try {
         const pageHtml = await generateSinglePage(
-          prompt, 
-          designSpec, 
-          pageName, 
+          prompt,
+          designSpec,
+          pageName,
           fileName,
           pageNames,
           generatedFiles['index.html'] // Pass index.html for style reference (might be undefined for first batch, which is fine)
         )
-        
+
         generatedFiles[fileName] = pageHtml
         if (tasks[taskIndex]) tasks[taskIndex].status = 'completed'
       } catch (error: any) {
@@ -538,7 +537,7 @@ async function generateWithAgentWorkflow(
   // Save to project
   await supabase
     .from('projects')
-    .update({ 
+    .update({
       code_content: JSON.stringify(generatedFiles),
       updated_at: new Date().toISOString()
     })
@@ -567,7 +566,7 @@ async function generateWithAgentWorkflow(
 // Generate design specification
 async function generateDesignSpec(prompt: string): Promise<string> {
   const response = await openai.chat.completions.create({
-    model: 'deepseek-chat',
+    model: 'deepseek-reasoner', // Use reasoner for new website generation
     messages: [
       {
         role: 'system',
@@ -626,7 +625,7 @@ CRITICAL REQUIREMENTS:
 ${indexHtmlReference ? `REFERENCE (match this header/footer style):\n${indexHtmlReference.substring(0, 2000)}` : ''}`
 
   const response = await openai.chat.completions.create({
-    model: 'deepseek-chat',
+    model: 'deepseek-reasoner', // Use reasoner for new website generation
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Create the ${pageName} page for: ${originalPrompt}` }
@@ -636,10 +635,10 @@ ${indexHtmlReference ? `REFERENCE (match this header/footer style):\n${indexHtml
   })
 
   let html = response.choices[0]?.message?.content || ''
-  
+
   // Clean up the response
   html = html.replace(/```html\s*/g, '').replace(/```\s*/g, '').trim()
-  
+
   // Ensure it starts with DOCTYPE
   if (!html.includes('<!DOCTYPE')) {
     html = '<!DOCTYPE html>\n<html lang="en">\n' + html
@@ -647,7 +646,7 @@ ${indexHtmlReference ? `REFERENCE (match this header/footer style):\n${indexHtml
   if (!html.includes('</html>')) {
     html += '\n</html>'
   }
-  
+
   return html
 }
 
@@ -663,7 +662,8 @@ async function generateSimple(
   supabase: any,
   history: Array<{ role: 'user' | 'ai', content: string }>
 ) {
-  const model = "deepseek-chat" // Use faster model for everything
+  // Use deepseek-chat for modifications, deepseek-reasoner for new websites
+  const model = isModification ? "deepseek-chat" : "deepseek-reasoner"
 
   await updateStatus({
     status: 'processing',
@@ -678,11 +678,11 @@ async function generateSimple(
   console.log('[MODIFICATION] isModification:', isModification)
   console.log('[MODIFICATION] User prompt:', prompt)
   console.log('[MODIFICATION] Existing files:', Object.keys(existingFiles))
-  console.log('[MODIFICATION] User message type:', 
+  console.log('[MODIFICATION] User message type:',
     userMessage.includes('ADD A NEW PAGE') ? 'NEW_PAGE' :
-    userMessage.includes('FIX A BUG') ? 'BUG_FIX' :
-    userMessage.includes('CHANGE STYLING') ? 'STYLE_CHANGE' :
-    userMessage.includes('EDIT CONTENT') ? 'CONTENT_EDIT' : 'GENERAL_MODIFY'
+      userMessage.includes('FIX A BUG') ? 'BUG_FIX' :
+        userMessage.includes('CHANGE STYLING') ? 'STYLE_CHANGE' :
+          userMessage.includes('EDIT CONTENT') ? 'CONTENT_EDIT' : 'GENERAL_MODIFY'
   )
 
   const relevantHistory = history.slice(-6)
@@ -690,9 +690,9 @@ async function generateSimple(
     { role: "system", content: systemPrompt },
     ...relevantHistory
       .filter(msg => msg.content && !msg.content.startsWith('Starting generation') && !msg.content.includes('%'))
-      .map(msg => ({ 
-        role: msg.role === 'ai' ? 'assistant' : 'user', 
-        content: msg.content 
+      .map(msg => ({
+        role: msg.role === 'ai' ? 'assistant' : 'user',
+        content: msg.content
       })),
     { role: "user", content: userMessage }
   ]
@@ -709,6 +709,7 @@ async function generateSimple(
     max_tokens: 8192,
     temperature: 0.7,
     response_format: { type: "json_object" },
+    ...(model === 'deepseek-reasoner' ? { extra_body: { thinking: { type: "enabled" } } } : {})
   } as any) as unknown as AsyncIterable<any>
 
   let fullContent = ''
@@ -717,7 +718,7 @@ async function generateSimple(
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta as any
-    
+
     if (delta?.reasoning_content) {
       fullReasoning += delta.reasoning_content
     }
@@ -727,7 +728,7 @@ async function generateSimple(
 
     if (Date.now() - lastUpdate > 2000) {
       const progress = Math.min(85, 20 + (fullContent.length / 500))
-      await updateStatus({ 
+      await updateStatus({
         progress,
         currentStep: '💻 Generating code...',
         files: { '_reasoning': fullReasoning }
@@ -736,8 +737,8 @@ async function generateSimple(
     }
   }
 
-  await updateStatus({ 
-    progress: 92, 
+  await updateStatus({
+    progress: 92,
     currentStep: '⚙️ Processing output...',
     files: { '_reasoning': fullReasoning }
   })
@@ -754,7 +755,7 @@ async function generateSimple(
 
   await supabase
     .from('projects')
-    .update({ 
+    .update({
       code_content: JSON.stringify(files),
       updated_at: new Date().toISOString()
     })
@@ -791,7 +792,7 @@ function postProcessHtml(html: string): string {
 
 function buildSystemPrompt(isModification: boolean, existingFiles: Record<string, string>): string {
   const fileList = Object.keys(existingFiles).filter(k => k !== '_reasoning').join(', ')
-  
+
   const basePrompt = `You are an expert web developer creating beautiful, modern websites.
 
 OUTPUT FORMAT:
@@ -880,7 +881,7 @@ function buildUserMessage(prompt: string, isModification: boolean, existingFiles
   const filesContext = Object.entries(existingFiles)
     .filter(([key]) => key !== '_reasoning')
     .map(([filename, content]) => {
-      const truncated = content.length > 4000 
+      const truncated = content.length > 4000
         ? content.substring(0, 4000) + '\n<!-- ... content truncated ... -->'
         : content
       return `=== ${filename} ===\n${truncated}`
@@ -888,24 +889,24 @@ function buildUserMessage(prompt: string, isModification: boolean, existingFiles
     .join('\n\n')
 
   const lowerPrompt = prompt.toLowerCase()
-  
+
   // Detect modification type
   const isNewPage = lowerPrompt.includes('add') && (lowerPrompt.includes('page') || lowerPrompt.includes('section'))
     || lowerPrompt.includes('create') && lowerPrompt.includes('page')
     || lowerPrompt.includes('new page')
-  
+
   const isBugFix = lowerPrompt.includes('fix') || lowerPrompt.includes('bug') || lowerPrompt.includes('broken')
     || lowerPrompt.includes('not working') || lowerPrompt.includes('error') || lowerPrompt.includes('issue')
-  
+
   const isStyleChange = lowerPrompt.includes('color') || lowerPrompt.includes('style') || lowerPrompt.includes('font')
     || lowerPrompt.includes('theme') || lowerPrompt.includes('dark') || lowerPrompt.includes('light')
     || lowerPrompt.includes('design') || lowerPrompt.includes('look')
-  
+
   const isContentEdit = lowerPrompt.includes('change') || lowerPrompt.includes('update') || lowerPrompt.includes('edit')
     || lowerPrompt.includes('modify') || lowerPrompt.includes('replace') || lowerPrompt.includes('text')
 
   let instructions = ''
-  
+
   if (isNewPage) {
     instructions = `
 TASK: ADD A NEW PAGE
@@ -961,7 +962,7 @@ ${instructions}`
 
 function parseAIOutput(rawContent: string, existingFiles: Record<string, string>, isModification: boolean): Record<string, string> {
   let files: Record<string, string> = {}
-  
+
   let jsonString = rawContent
     .replace(/```json\s*/g, '')
     .replace(/```\s*/g, '')
@@ -1045,7 +1046,7 @@ function extractFilesManually(content: string): Record<string, string> {
 
 export async function getGenerationStatus(jobId: string): Promise<GenerationJob | null> {
   const supabase = await createClient()
-  
+
   const { data, error } = await supabase
     .from('generation_jobs')
     .select('*')
@@ -1072,7 +1073,7 @@ export async function getGenerationStatus(jobId: string): Promise<GenerationJob 
 // Get active (running) job for a project - used to resume on page refresh
 export async function getActiveJobForProject(projectId: string): Promise<GenerationJob | null> {
   const supabase = await createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
@@ -1100,8 +1101,8 @@ export async function getActiveJobForProject(projectId: string): Promise<Generat
     // Mark stale job as error
     await supabase
       .from('generation_jobs')
-      .update({ 
-        status: 'error', 
+      .update({
+        status: 'error',
         error: 'Job timed out',
         current_step: 'Timed out'
       })
