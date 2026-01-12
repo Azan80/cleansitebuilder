@@ -16,18 +16,33 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.cleansitebuilder.com'),
   title: "CleanSiteBuilder - AI Website Builder",
   description: "The AI-powered builder that turns your prompts into production-ready UI templates and websites. Deploy instantly to the edge.",
   keywords: [
-    "SaaS", "automation", "workflow", "productivity", "business tools", "AI website builder",
-    "ai website generator", "ui Templates", "website builder", "deployment ready", "generate landing page", "clean website", "llms",
-    "html", "css", "tailwind", "bootstrap", "animation"
+    "website builder ai", "automation", "website builder", "no code ", "business tools", "AI website builder",
+    "ai website generator free","ai website generator free", "ui Templates","ai website generator free", "deployment ready", "generate landing page", "clean website", "llms",
+    "html", "css", "tailwind", "bootstrap", "animation", "deepseek" ,"chatgpt", 
   ],
   authors: [{ name: "CleanSiteBuilder" }],
   openGraph: {
     title: "CleanSiteBuilder - AI Website Builder",
     description: "The AI-powered builder that turns your prompts into production-ready UI templates and websites. Deploy instantly to the edge.",
     type: "website",
+  },
+  alternates: {
+    canonical: '/',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
 };
 
