@@ -3,6 +3,9 @@ import { Metadata } from "next";
 export const metadata: Metadata = {
     title: "Create your account - CleanSiteBuilder",
     description: "Create account for CleanSiteBuilder and start building AI-powered websites.",
+    alternates: {
+        canonical: '/signup',
+    },
 };
 
 export default function SignupLayout({

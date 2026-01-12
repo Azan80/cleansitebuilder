@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   description: "The AI-powered builder that turns your prompts into production-ready UI templates and websites. Deploy instantly to the edge.",
   keywords: [
     "website builder ai", "automation", "website builder", "no code ", "business tools", "AI website builder",
-    "ai website generator free","ai website generator free", "ui Templates","ai website generator free", "deployment ready", "generate landing page", "clean website", "llms",
-    "html", "css", "tailwind", "bootstrap", "animation", "deepseek" ,"chatgpt", 
+    "ai website generator free", "ai website generator free", "ui Templates", "ai website generator free", "deployment ready", "generate landing page", "clean website", "llms",
+    "html", "css", "tailwind", "bootstrap", "animation", "deepseek", "chatgpt",
   ],
   authors: [{ name: "CleanSiteBuilder" }],
   openGraph: {
@@ -43,6 +43,12 @@ export const metadata: Metadata = {
       'max-image-preview': 'large',
       'max-snippet': -1,
     },
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "CleanSiteBuilder - AI Website Builder",
+    description: "The AI-powered builder that turns your prompts into production-ready UI templates and websites. Deploy instantly to the edge.",
+    creator: "@iamazan8",
   },
 };
 
