@@ -85,7 +85,7 @@ export default function ToolsPage() {
                             <Link
                                 key={tool.href}
                                 href={tool.href}
-                                className="group relative bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/10 rounded-2xl p-8 hover:border-indigo-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10"
+                                className="group relative bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 hover:border-indigo-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10"
                             >
                                 <div className="flex items-start gap-4">
                                     <div className="p-3 bg-indigo-500/10 rounded-xl group-hover:bg-indigo-500/20 transition-colors">
@@ -130,7 +130,7 @@ export default function ToolsPage() {
                     </p>
                     <Link
                         href="/"
-                        className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all"
+                        className="inline-flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors"
                     >
                         Start Building Free
                         <ArrowRight className="w-5 h-5" />

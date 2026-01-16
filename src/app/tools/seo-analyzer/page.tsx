@@ -211,7 +211,6 @@ ${result.recommendations.map((r, i) => `${i + 1}. [${r.priority.toUpperCase()}] 
         a.click();
     };
 
-    const sampleUrls = ["google.com", "github.com", "wikipedia.org", "amazon.com", "twitter.com"];
 
     return (
         <ToolLayout
@@ -236,24 +235,11 @@ ${result.recommendations.map((r, i) => `${i + 1}. [${r.priority.toUpperCase()}] 
                     <button
                         onClick={analyzeUrl}
                         disabled={isLoading || !url}
-                        className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all flex items-center gap-2"
+                        className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-colors flex items-center gap-2"
                     >
                         {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
                         {isLoading ? "Analyzing..." : "Analyze"}
                     </button>
-                </div>
-
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-gray-500">Try:</span>
-                    {sampleUrls.map((sampleUrl) => (
-                        <button
-                            key={sampleUrl}
-                            onClick={() => setUrl(sampleUrl)}
-                            className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
-                        >
-                            {sampleUrl}
-                        </button>
-                    ))}
                 </div>
 
                 {error && (
@@ -537,7 +523,7 @@ ${result.recommendations.map((r, i) => `${i + 1}. [${r.priority.toUpperCase()}] 
             {/* Empty State */}
             {!result && !isLoading && (
                 <div className="text-center py-20">
-                    <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                    <div className="w-20 h-20 bg-indigo-600 rounded-2xl mx-auto mb-6 flex items-center justify-center">
                         <Search className="w-10 h-10 text-white" />
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-2">Professional SEO Analysis</h2>
