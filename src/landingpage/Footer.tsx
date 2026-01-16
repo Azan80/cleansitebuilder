@@ -28,18 +28,19 @@ export const Footer = () => {
           <div>
             <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-6">Product</h4>
             <ul className="space-y-4 text-gray-400 text-sm font-medium">
-              <li><Link href="#" className="hover:text-indigo-400 transition-colors">Features</Link></li>
+              <li><Link href="#features" className="hover:text-indigo-400 transition-colors">Features</Link></li>
               <li><Link href="/pricing" className="hover:text-indigo-400 transition-colors">Pricing</Link></li>
-              <li><Link href="#" className="hover:text-indigo-400 transition-colors">Changelog</Link></li>
+              <li><Link href="/tools" className="hover:text-indigo-400 transition-colors">Free Tools</Link></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-6">Company</h4>
+            <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-6">Free Tools</h4>
             <ul className="space-y-4 text-gray-400 text-sm font-medium">
-              <li><Link href="#" className="hover:text-indigo-400 transition-colors">About</Link></li>
-              <li><Link href="#" className="hover:text-indigo-400 transition-colors">Blog</Link></li>
-              <li><Link href="#" className="hover:text-indigo-400 transition-colors">Careers</Link></li>
+              <li><Link href="/tools/seo-analyzer" className="hover:text-indigo-400 transition-colors">SEO Analyzer</Link></li>
+              <li><Link href="/tools/meta-tag-generator" className="hover:text-indigo-400 transition-colors">Meta Tag Generator</Link></li>
+              <li><Link href="/tools/base64" className="hover:text-indigo-400 transition-colors">Base64 Encoder</Link></li>
+              <li><Link href="/tools/qr-code-generator" className="hover:text-indigo-400 transition-colors">QR Code Generator</Link></li>
             </ul>
           </div>
 

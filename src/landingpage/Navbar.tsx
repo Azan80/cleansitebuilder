@@ -68,6 +68,12 @@ export const Navbar = () => {
                 </Link>
               ))}
               <Link
+                href="/tools"
+                className="px-5 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+              >
+                Free Tools
+              </Link>
+              <Link
                 href="/pricing"
                 className="px-5 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
               >
@@ -130,6 +136,13 @@ export const Navbar = () => {
                   {item}
                 </Link>
               ))}
+              <Link
+                href="/tools"
+                className="text-lg font-medium text-gray-300 py-4 px-6 hover:bg-white/5 rounded-2xl transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Free Tools ✨
+              </Link>
               <Link
                 href="/pricing"
                 className="text-lg font-medium text-gray-300 py-4 px-6 hover:bg-white/5 rounded-2xl transition-colors"

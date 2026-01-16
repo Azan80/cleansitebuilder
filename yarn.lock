@@ -357,21 +357,21 @@ __metadata:
   linkType: hard
 
 "@emnapi/core@npm:^1.4.3, @emnapi/core@npm:^1.6.0, @emnapi/core@npm:^1.7.1":
-  version: 1.7.1
-  resolution: "@emnapi/core@npm:1.7.1"
+  version: 1.8.1
+  resolution: "@emnapi/core@npm:1.8.1"
   dependencies:
     "@emnapi/wasi-threads": "npm:1.1.0"
     tslib: "npm:^2.4.0"
-  checksum: 10c0/f3740be23440b439333e3ae3832163f60c96c4e35337f3220ceba88f36ee89a57a871d27c94eb7a9ff98a09911ed9a2089e477ab549f4d30029f8b907f84a351
+  checksum: 10c0/2c242f4b49779bac403e1cbcc98edacdb1c8ad36562408ba9a20663824669e930bc8493be46a2522d9dc946b8d96cd7073970bae914928c7671b5221c85b432e
   languageName: node
   linkType: hard
 
 "@emnapi/runtime@npm:^1.4.3, @emnapi/runtime@npm:^1.6.0, @emnapi/runtime@npm:^1.7.0, @emnapi/runtime@npm:^1.7.1":
-  version: 1.7.1
-  resolution: "@emnapi/runtime@npm:1.7.1"
+  version: 1.8.1
+  resolution: "@emnapi/runtime@npm:1.8.1"
   dependencies:
     tslib: "npm:^2.4.0"
-  checksum: 10c0/26b851cd3e93877d8732a985a2ebf5152325bbacc6204ef5336a47359dedcc23faeb08cdfcb8bb389b5401b3e894b882bc1a1e55b4b7c1ed1e67c991a760ddd5
+  checksum: 10c0/f4929d75e37aafb24da77d2f58816761fe3f826aad2e37fa6d4421dac9060cbd5098eea1ac3c9ecc4526b89deb58153852fa432f87021dc57863f2ff726d713f
   languageName: node
   linkType: hard
 
@@ -851,13 +851,13 @@ __metadata:
   linkType: hard
 
 "@napi-rs/wasm-runtime@npm:^1.0.7":
-  version: 1.1.0
-  resolution: "@napi-rs/wasm-runtime@npm:1.1.0"
+  version: 1.1.1
+  resolution: "@napi-rs/wasm-runtime@npm:1.1.1"
   dependencies:
     "@emnapi/core": "npm:^1.7.1"
     "@emnapi/runtime": "npm:^1.7.1"
     "@tybys/wasm-util": "npm:^0.10.1"
-  checksum: 10c0/ee351052123bfc635c4cef03ac273a686522394ccd513b1e5b7b3823cecd6abb4a31f23a3a962933192b87eb7b7c3eb3def7748bd410edc66f932d90cf44e9ab
+  checksum: 10c0/04d57b67e80736e41fe44674a011878db0a8ad893f4d44abb9d3608debb7c174224cba2796ed5b0c1d367368159f3ca6be45f1c59222f70e32ddc880f803d447
   languageName: node
   linkType: hard
 
@@ -974,24 +974,24 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polar-sh/adapter-utils@npm:0.4.0":
-  version: 0.4.0
-  resolution: "@polar-sh/adapter-utils@npm:0.4.0"
+"@polar-sh/adapter-utils@npm:0.4.3":
+  version: 0.4.3
+  resolution: "@polar-sh/adapter-utils@npm:0.4.3"
   dependencies:
-    "@polar-sh/sdk": "npm:^0.41.5"
-  checksum: 10c0/26edf0f964ddfdfb8bb87d5527c80335c7e8b5a461bbe183adc035015b394a817d89d4d6f605e5cce962cf1aa36ed0d28e50bc5dcfcf2b2df4b5764a073ee620
+    "@polar-sh/sdk": "npm:^0.42.1"
+  checksum: 10c0/5d5e1e12e2aa6aef566a93461c21cfbd961fbaea1a6fef58d0b0df5fbe0a57e6008b01d7a411a3182769efb314a0bf66668fb1d825788b98c0866103631f4df4
   languageName: node
   linkType: hard
 
 "@polar-sh/nextjs@npm:^0.9.0":
-  version: 0.9.0
-  resolution: "@polar-sh/nextjs@npm:0.9.0"
+  version: 0.9.3
+  resolution: "@polar-sh/nextjs@npm:0.9.3"
   dependencies:
-    "@polar-sh/adapter-utils": "npm:0.4.0"
-    "@polar-sh/sdk": "npm:^0.41.5"
+    "@polar-sh/adapter-utils": "npm:0.4.3"
+    "@polar-sh/sdk": "npm:^0.42.1"
   peerDependencies:
     next: ^15.0.0 || ^16.0.0
-  checksum: 10c0/e75818359b42d6000a8e5470d2c997e4028fd1ef47c886ea508cded23e7ae4b214398e8f6dd7684a180420ec3d8f674c71eb2167f8ca6037800a1d53f5b5882b
+  checksum: 10c0/d5e873817d244f20161a6e348caca234213e0e66f1998e6ccb48682139210d122a5bdb168b63d643a3c291b4fa1c2d9ce4b58b010d433a813611e78f0fe84823
   languageName: node
   linkType: hard
 
@@ -1002,6 +1002,16 @@ __metadata:
     standardwebhooks: "npm:^1.0.0"
     zod: "npm:^3.25.65 || ^4.0.0"
   checksum: 10c0/51f1c87260187bbf4bf53b8b5d00dd8d4592b26f5e5177d8bcba278d19fed7e213d2fc76b5f4cfcd1046061bb29de0bbc67d3cdcee71fd07c0c60709da62294d
+  languageName: node
+  linkType: hard
+
+"@polar-sh/sdk@npm:^0.42.1":
+  version: 0.42.2
+  resolution: "@polar-sh/sdk@npm:0.42.2"
+  dependencies:
+    standardwebhooks: "npm:^1.0.0"
+    zod: "npm:^3.25.65 || ^4.0.0"
+  checksum: 10c0/2fe11fadb678aade32f038ee226067ed4c720375bb10d660c6820841fb9c402af127e899b4037e51a21ff681102e18f5c5415a08dbc31c1d5452f32f016e11b1
   languageName: node
   linkType: hard
 
@@ -5340,16 +5350,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.25.0 || ^4.0.0":
+"zod@npm:^3.25.0 || ^4.0.0, zod@npm:^3.25.65 || ^4.0.0":
   version: 4.1.12
   resolution: "zod@npm:4.1.12"
   checksum: 10c0/b64c1feb19e99d77075261eaf613e0b2be4dfcd3551eff65ad8b4f2a079b61e379854d066f7d447491fcf193f45babd8095551a9d47973d30b46b6d8e2c46774
-  languageName: node
-  linkType: hard
-
-"zod@npm:^3.25.65 || ^4.0.0":
-  version: 4.1.13
-  resolution: "zod@npm:4.1.13"
-  checksum: 10c0/d7e74e82dba81a91ffc3239cd85bc034abe193a28f7087a94ab258a3e48e9a7ca4141920cac979a0d781495b48fc547777394149f26be04c3dc642f58bbc3941
   languageName: node
   linkType: hard
