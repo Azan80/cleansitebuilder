@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const tools = [
+  'page-speed-test',
   'seo-analyzer',
   'meta-tag-generator',
   'base64',

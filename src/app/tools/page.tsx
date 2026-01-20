@@ -5,7 +5,8 @@ import {
     Tags,
     Binary,
     QrCode,
-    ArrowRight
+    ArrowRight,
+    Zap
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -15,6 +16,14 @@ export const metadata: Metadata = {
 };
 
 const tools = [
+    {
+        title: "Page Speed Test",
+        description: "Instant website performance audit. Analyze load times, Core Web Vitals, and get optimization recommendations.",
+        href: "/tools/page-speed-test",
+        icon: Zap,
+        category: "Performance",
+        badge: "New",
+    },
     {
         title: "SEO Analyzer",
         description: "Professional SEO analysis with 25+ checks. Analyze meta tags, robots.txt, sitemap, performance, and more.",

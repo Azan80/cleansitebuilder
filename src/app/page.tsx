@@ -2,6 +2,7 @@ import { AutoCreateProjectHandler } from "@/components/AutoCreateProjectHandler"
 import { Comparison } from "@/landingpage/Comparison";
 import { Features } from "@/landingpage/Features";
 import { Footer } from "@/landingpage/Footer";
+import { FreeTools } from "@/landingpage/FreeTools";
 import { Hero } from "@/landingpage/Hero";
 import { HowItWorks } from "@/landingpage/HowItWorks";
 import { Navbar } from "@/landingpage/Navbar";
@@ -30,6 +31,7 @@ export default async function Home() {
       <Showcase />
       <Comparison />
       <Pricing userEmail={user?.email || null} />
+      <FreeTools />
 
       {/* Final CTA */}
       <section className="py-32 relative overflow-hidden">
