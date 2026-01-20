@@ -515,7 +515,7 @@ async function generateWithAgentWorkflow(
     })
   }
 
-  // Step 4: Finalize
+  // Step 4: Finaliz
   const finalTaskIndex = tasks.length - 1
   tasks[finalTaskIndex].status = 'in_progress'
   await updateStatus({
